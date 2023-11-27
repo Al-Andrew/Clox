@@ -32,7 +32,7 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
         return;
     }
 
-    chunk->values[chunk->used-1] = op;
+    chunk->values[chunk->used] = op;
     chunk->used += 1;
     return;
 }
