@@ -1,6 +1,5 @@
 #include "chunk.h"
 #include "common.h"
-#include <stdint.h>
 
 
 Clox_Chunk Clox_Chunk_New_Empty() {
@@ -8,34 +7,33 @@ Clox_Chunk Clox_Chunk_New_Empty() {
 }
 
 void Clox_Chunk_Delete(Clox_Chunk* const chunk) {
-    if(chunk->code)
+    if(chunk->code) {
         free(chunk->code);
+    }
+    if(chunk->source_lines) {
+        free(chunk->source_lines);
+    }
     Clox_Value_Array_Delete(&chunk->constants);
     *chunk = (Clox_Chunk){0};
 
     return;
 }
 
-void Clox_Chunk_Push(Clox_Chunk* const chunk, uint8_t const data) {
+void Clox_Chunk_Push(Clox_Chunk* const chunk, uint8_t const data, uint32_t const source_line) {
     CLOX_DEV_ASSERT(chunk != NULL);
 
-    if(chunk->code == NULL) {
-        chunk->allocated = 1;
-        chunk->code = malloc(sizeof(uint8_t) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
-        chunk->code[0] = data;
-        chunk->used = 1;
-        return;
-    }
-
     if(chunk->used >= chunk->allocated) {
-        chunk->allocated *= 2;
+        chunk->allocated = (chunk->allocated == 0)?(8):(chunk->allocated*2);
         chunk->code = realloc(chunk->code, sizeof(uint8_t) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
+        chunk->source_lines = realloc(chunk->source_lines, sizeof(uint32_t) * chunk->allocated);
         chunk->code[chunk->used] = data;
+        chunk->source_lines[chunk->used] = source_line;
         chunk->used += 1;
         return;
     }
 
-    chunk->code[chunk->used-1] = data;
+    chunk->code[chunk->used] = data;
+    chunk->source_lines[chunk->used] = source_line;
     chunk->used += 1;
     return;
 }
@@ -58,11 +56,18 @@ void Clox_Chunk_Print(Clox_Chunk* const chunk, char const* const name) {
     return;
 }
 
-uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t offset) {
+uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset) {
     CLOX_DEV_ASSERT(chunk != NULL);
     CLOX_DEV_ASSERT(offset <= chunk->used);
 
     printf("%04X ", offset);
+    if (offset > 0
+        && chunk->source_lines[offset] == chunk->source_lines[offset - 1])
+    {
+        printf("   | ");
+    } else {
+        printf("%4d ", chunk->source_lines[offset]);
+    }
 
     Clox_Op_Code opcode = chunk->code[offset];
     switch (opcode) {

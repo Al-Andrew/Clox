@@ -5,9 +5,9 @@ int main(int argc, char** argv)
 {
     Clox_Chunk chunk = Clox_Chunk_New_Empty();
 
-    Clox_Chunk_Push(&chunk, OP_RETURN);
-    Clox_Chunk_Push(&chunk, OP_CONSTANT);
-    Clox_Chunk_Push(&chunk, Clox_Chunk_Push_Constant(&chunk, 420.0));
+    Clox_Chunk_Push(&chunk, OP_CONSTANT, 0);
+    Clox_Chunk_Push(&chunk, Clox_Chunk_Push_Constant(&chunk, 420.0), 0);
+    Clox_Chunk_Push(&chunk, OP_RETURN, 0);
 
     Clox_Chunk_Print(&chunk, "My First Chunk");
 
