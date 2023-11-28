@@ -13,6 +13,6 @@
 #define STRINGIFY(x) STRINGIFY2(X)
 
 #define CLOX_DEV_ASSERT(exp) { assert((exp)); }
-#define CLOX_UNREACHABLE(exp) { assert(false); }
+#define CLOX_UNREACHABLE() { assert(false); }
 
 #endif // CLOX_COMMON_H_INCLUDED
