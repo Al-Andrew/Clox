@@ -15,4 +15,7 @@
 #define CLOX_DEV_ASSERT(exp) { assert((exp)); }
 #define CLOX_UNREACHABLE() { assert(false); }
 
+// TODO(Al-Andrew): proper s8 struct, and macros
+#define ls8$(str) str, sizeof(str) // NOTE(Al-Andrew): only works with bss strings
+
 #endif // CLOX_COMMON_H_INCLUDED

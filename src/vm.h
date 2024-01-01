@@ -34,5 +34,6 @@ Clox_VM Clox_VM_New_Empty();
 void Clox_VM_Delete(Clox_VM* const vm);
 
 Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chunk);
+Clox_Interpret_Result Clox_Interpret(const char* source);
 
 #endif // CLOX_VM_H_INCLUDED

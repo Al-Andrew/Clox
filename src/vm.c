@@ -1,6 +1,6 @@
 #include "vm.h"
 #include "common.h"
-
+#include "compiler.h"
 
 Clox_VM Clox_VM_New_Empty() {
     return (Clox_VM){0};
@@ -104,4 +104,10 @@ Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chu
     }
 
     CLOX_UNREACHABLE();
+}
+
+Clox_Interpret_Result Clox_Interpret(const char* source) {
+    Clox_Compile_Source(source);
+
+    return (Clox_Interpret_Result){.return_value = 0, .status = INTERPRET_OK};
 }
