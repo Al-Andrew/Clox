@@ -50,7 +50,7 @@ void Clox_Chunk_Print(Clox_Chunk* const chunk, char const* const name) {
     printf("== %s ==\n", name);
     
     for(uint32_t offset = 0; offset < chunk->used;) {
-        offset += Clox_Chunk_Print_Op_Code(chunk, offset);
+        offset = Clox_Chunk_Print_Op_Code(chunk, offset);
     }
 
     return;
@@ -84,23 +84,23 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
         } break;
         case OP_ARITHMETIC_NEGATION: {
             printf("OP_ARITHMETIC_NEGATION\n");
-            return offset + 2;
+            return offset + 1;
         } break;
         case OP_ADD: {
             printf("OP_ADD\n");
-            return offset + 3;
+            return offset + 1;
         } break;
         case OP_SUB: {
             printf("OP_SUB\n");
-            return offset + 3;
+            return offset + 1;
         } break;
         case OP_MUL: {
             printf("OP_MUL\n");
-            return offset + 3;
+            return offset + 1;
         } break;
         case OP_DIV: {
             printf("OP_DIV\n");
-            return offset + 3;
+            return offset + 1;
         } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);
