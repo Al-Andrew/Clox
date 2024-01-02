@@ -16,6 +16,8 @@ int Clox_Print_Help() {
 }
 
 int Clox_Repl() {
+    Clox_VM vm = Clox_VM_New_Empty();
+
     char line[1024];
     for (;;) {
         printf("> ");
@@ -25,9 +27,9 @@ int Clox_Repl() {
             break;
         }
 
-        Clox_Interpret(line);
+        Clox_VM_Interpret_Source(&vm, line);
     }
-
+    Clox_VM_Delete(&vm);
     return 0;
 }
 
@@ -62,12 +64,13 @@ char* Clox_Read_File(const char* path_to_file) {
 }
 
 int Clox_Run_File(const char* path_to_file) {
-
     char* source = Clox_Read_File(path_to_file);
-    Clox_Interpret_Result result = Clox_Interpret(source);
+    Clox_VM vm = Clox_VM_New_Empty();
+
+    Clox_Interpret_Result result = Clox_VM_Interpret_Source(&vm, source);
     free(source);
     source = NULL;
-
+    Clox_VM_Delete(&vm);
     return result.status;
 }
 
@@ -84,33 +87,5 @@ int main(int argc, char** argv)
     }
     CLOX_UNREACHABLE();
 
-    Clox_VM vm = Clox_VM_New_Empty();
-    Clox_Chunk chunk = Clox_Chunk_New_Empty();
-
-    Clox_Chunk_Push(&chunk, OP_CONSTANT, 0);
-    Clox_Chunk_Push(&chunk, Clox_Chunk_Push_Constant(&chunk, 1.2), 0);
-
-    Clox_Chunk_Push(&chunk, OP_CONSTANT, 0);
-    Clox_Chunk_Push(&chunk, Clox_Chunk_Push_Constant(&chunk, 3.4), 0);
-
-    Clox_Chunk_Push(&chunk, OP_ADD, 0);
-
-    Clox_Chunk_Push(&chunk, OP_CONSTANT, 0);
-    Clox_Chunk_Push(&chunk, Clox_Chunk_Push_Constant(&chunk, 5.6), 0);
-    
-    Clox_Chunk_Push(&chunk, OP_DIV, 0);
-    Clox_Chunk_Push(&chunk, OP_ARITHMETIC_NEGATION, 0);
-
-    Clox_Chunk_Push(&chunk, OP_RETURN, 0);
-    // Clox_Chunk_Print(&chunk, "My First Chunk");
-
-    Clox_Interpret_Result result = Clox_VM_Interpret(&vm, &chunk);
-    printf("[%s] Interpret done.\n", (result.status == INTERPRET_OK)?"SUCCESS":"FAILURE");
-    printf("  status: %d\n", (uint32_t)result.status);
-    printf("  return_value: ");
-    Clox_Value_Print(result.return_value);
-    printf("\n");
-    Clox_Chunk_Delete(&chunk);
-    Clox_VM_Delete(&vm);
     return 0;
 }
