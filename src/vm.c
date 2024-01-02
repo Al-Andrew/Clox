@@ -21,7 +21,7 @@ static Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm) {
 // NOTE(Al-Andrew): assumes `Clox_VM* const vm` is in scope and we're returning Clox_Interpret_Result
 #define CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(N) { if((vm->stack_top - vm->stack) < N) return (Clox_Interpret_Result){.status = INTERPRET_COMPILE_ERROR}; }
 
-Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chunk) {
+Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* const chunk) {
     vm->chunk = chunk;
     vm->instruction_pointer = vm->chunk->code;
     vm->stack_top = vm->stack;
@@ -30,10 +30,6 @@ Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chu
     for (;;) {
         Clox_Op_Code opcode = (Clox_Op_Code)vm->instruction_pointer[0];
         
-        #ifdef CLOX_DEBUG_TRACE_EXECUTION
-        Clox_Chunk_Print_Op_Code(vm->chunk, (uint32_t)(vm->instruction_pointer - vm->chunk->code));
-        #endif // CLOX_DEBUG_TRACE_EXECUTION
-
         #ifdef CLOX_DEBUG_TRACE_STACK
         printf("[");
         for(Clox_Value* stack_ptr = vm->stack; stack_ptr < vm->stack_top; ++stack_ptr)
@@ -43,6 +39,11 @@ Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chu
         }
         printf("]\n");
         #endif // CLOX_DEBUG_TRACE_STACK
+
+        #ifdef CLOX_DEBUG_TRACE_EXECUTION
+        Clox_Chunk_Print_Op_Code(vm->chunk, (uint32_t)(vm->instruction_pointer - vm->chunk->code));
+        #endif // CLOX_DEBUG_TRACE_EXECUTION
+
 
         switch (opcode) {
             case OP_RETURN: {
@@ -75,8 +76,8 @@ Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chu
             case OP_SUB: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
 
-                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
                 Clox_Value rhs = Clox_VM_Stack_Pop(vm);
+                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
                 Clox_VM_Stack_Push(vm, lhs - rhs);
                 vm->instruction_pointer += 1;
             }break;
@@ -91,8 +92,8 @@ Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chu
             case OP_DIV: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
 
-                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
                 Clox_Value rhs = Clox_VM_Stack_Pop(vm);
+                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
                 Clox_VM_Stack_Push(vm, lhs / rhs);
                 vm->instruction_pointer += 1;
             }break;
@@ -106,8 +107,23 @@ Clox_Interpret_Result Clox_VM_Interpret(Clox_VM* const vm, Clox_Chunk* const chu
     CLOX_UNREACHABLE();
 }
 
-Clox_Interpret_Result Clox_Interpret(const char* source) {
-    Clox_Compile_Source(source);
+Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* vm, const char* source) {
+    Clox_Chunk chunk = Clox_Chunk_New_Empty();
+    Clox_Interpret_Result result = {0};
 
-    return (Clox_Interpret_Result){.return_value = 0, .status = INTERPRET_OK};
+    do {
+
+        if (!Clox_Compile_Source_To_Chunk(source, &chunk)) {
+            result.return_value = 0;
+            result.status = INTERPRET_COMPILE_ERROR;            
+            break;
+        }
+
+        vm->chunk = &chunk;
+        vm->instruction_pointer = vm->chunk->code;
+        result = Clox_VM_Interpret_Chunk(vm, &chunk);
+    } while(false);
+
+    Clox_Chunk_Delete(&chunk);
+    return result;
 }
