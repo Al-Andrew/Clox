@@ -38,6 +38,7 @@ static void Clox_Compiler_Compile_Unary(Clox_Parser* parser);
 static void Clox_Compiler_Compile_Binary(Clox_Parser* parser);
 static void Clox_Compiler_Compile_Grouping(Clox_Parser* parser);
 static void Clox_Compiler_Compile_Number(Clox_Parser* parser);
+static void Clox_Compiler_Compile_Literal(Clox_Parser* parser);
 
 static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_LEFT_PAREN]    = {Clox_Compiler_Compile_Grouping, NULL, CLOX_PRECEDENCE_NONE},
@@ -51,7 +52,7 @@ static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_SEMICOLON]     = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_SLASH]         = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_FACTOR},
   [CLOX_TOKEN_STAR]          = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_FACTOR},
-  [CLOX_TOKEN_BANG]          = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_BANG]          = {Clox_Compiler_Compile_Unary   , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_BANG_EQUAL]    = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_EQUAL]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_EQUAL_EQUAL]   = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -65,17 +66,17 @@ static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_AND]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_CLASS]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_ELSE]          = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_FALSE]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_FALSE]         = {Clox_Compiler_Compile_Literal , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_FOR]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_FUN]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_IF]            = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_NIL]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_NIL]           = {Clox_Compiler_Compile_Literal , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_OR]            = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_PRINT]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_RETURN]        = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_SUPER]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_THIS]          = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_TRUE]          = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_TRUE]          = {Clox_Compiler_Compile_Literal , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_VAR]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_WHILE]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_ERROR]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -178,6 +179,15 @@ static inline void Clox_Compiler_Compile_Number(Clox_Parser* parser) {
     Clox_Compiler_Emit_Constant(parser, CLOX_VALUE_NUMBER(value));
 }
 
+static inline void Clox_Compiler_Compile_Literal(Clox_Parser* parser) {
+    switch (parser->previous.type) {
+        case CLOX_TOKEN_FALSE: Clox_Compiler_Emit_Byte(parser, OP_FALSE); break;
+        case CLOX_TOKEN_NIL: Clox_Compiler_Emit_Byte(parser, OP_NIL); break;
+        case CLOX_TOKEN_TRUE: Clox_Compiler_Emit_Byte(parser, OP_TRUE); break;
+        default: CLOX_UNREACHABLE();
+  }
+}
+
 static inline Clox_Parse_Rule* Clox_Get_Parse_Rule(Clox_Token_Type operator);
 static void Clox_Compiler_Parse_Precendence(Clox_Parser* parser, Clox_Precedence precedence) {
     Clox_Compiler_Advance(parser);
@@ -216,6 +226,9 @@ static void Clox_Compiler_Compile_Unary(Clox_Parser* parser) {
     switch (operator) {
         case CLOX_TOKEN_MINUS: {
             Clox_Compiler_Emit_Byte(parser, OP_ARITHMETIC_NEGATION); 
+        } break;
+        case CLOX_TOKEN_BANG: {
+            Clox_Compiler_Emit_Byte(parser, OP_BOOLEAN_NEGATION); 
         } break;
         default: {
             CLOX_UNREACHABLE();

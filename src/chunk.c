@@ -82,8 +82,24 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             printf("'\n");
             return offset + 2;    
         } break;
+        case OP_NIL: {
+            printf("OP_NIL\n");
+            return offset + 1;
+        } break;
+        case OP_TRUE: {
+            printf("OP_TRUE\n");
+            return offset + 1;
+        } break;
+        case OP_FALSE: {
+            printf("OP_FALSE\n");
+            return offset + 1;
+        } break;
         case OP_ARITHMETIC_NEGATION: {
             printf("OP_ARITHMETIC_NEGATION\n");
+            return offset + 1;
+        } break;
+        case OP_BOOLEAN_NEGATION: {
+            printf("OP_BOOLEAN_NEGATION\n");
             return offset + 1;
         } break;
         case OP_ADD: {

@@ -8,11 +8,15 @@
 typedef enum {
     OP_RETURN = 0,
     OP_CONSTANT,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
     OP_ARITHMETIC_NEGATION,
     OP_ADD,
     OP_SUB,
     OP_MUL,
     OP_DIV,
+    OP_BOOLEAN_NEGATION,
 } Clox_Op_Code;
 
 typedef struct {

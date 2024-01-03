@@ -19,7 +19,7 @@ static inline Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm) {
 }
 
 static inline Clox_Value Clox_VM_Stack_Peek(Clox_VM* const vm, uint32_t depth) {
-    return *(vm->stack_top - depth);
+    return *(vm->stack_top - 1 - depth);
 }
 
 // NOTE(Al-Andrew): assumes `Clox_VM* const vm` is in scope and we're returning Clox_Interpret_Result
@@ -65,6 +65,18 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 Clox_VM_Stack_Push(vm, constant_value);
                 vm->instruction_pointer += 2;
             }break;
+            case OP_NIL: {
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_NIL);
+                vm->instruction_pointer += 1;
+            } break;
+            case OP_TRUE: {
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(true));
+                vm->instruction_pointer += 1;
+            } break;
+            case OP_FALSE: {
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(false));
+                vm->instruction_pointer += 1;
+            } break;
             case OP_ARITHMETIC_NEGATION: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
                 CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
@@ -72,6 +84,23 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 double value = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(-value));
                 vm->instruction_pointer += 1;
+            }break;
+            case OP_BOOLEAN_NEGATION: {
+                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
+                Clox_Value_Type top_type = Clox_VM_Stack_Peek(vm, 0).type; 
+
+                if(top_type == CLOX_VALUE_TYPE_NIL) {
+                    Clox_VM_Stack_Pop(vm); // pop the nil of the stack
+                    Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(true));
+                    vm->instruction_pointer += 1;
+                } else if (top_type == CLOX_VALUE_TYPE_BOOL) {
+                    bool value = Clox_VM_Stack_Pop(vm).boolean;
+                    Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(!value));
+                    vm->instruction_pointer += 1;
+                } else {
+                    // TODO(Al-Andrew, Diagnostic): diagnostic
+                    return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_RUNTIME_ERROR};
+                }
             }break;
             case OP_ADD: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
