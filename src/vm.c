@@ -145,6 +145,55 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs / rhs));
                 vm->instruction_pointer += 1;
             }break;
+            case OP_EQUAL: {
+                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
+                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
+                Clox_Value rhs = Clox_VM_Stack_Pop(vm);
+
+                if(lhs.type != rhs.type) {
+                    Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(false));
+                    vm->instruction_pointer += 1;
+                    break;
+                }
+
+                switch(lhs.type) {
+                    case CLOX_VALUE_TYPE_NIL: {
+                        Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(true));
+                        vm->instruction_pointer += 1;
+                    } break;
+                    case CLOX_VALUE_TYPE_BOOL: {
+                        Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs.boolean == rhs.boolean));
+                        vm->instruction_pointer += 1;
+                    } break;
+                    case CLOX_VALUE_TYPE_NUMBER: {
+                        Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs.number == rhs.number));
+                        vm->instruction_pointer += 1;
+                    } break;
+                    default: CLOX_UNREACHABLE();
+                }
+            }break;
+            case OP_GREATER: {
+                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
+                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
+                CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
+
+
+                double rhs = Clox_VM_Stack_Pop(vm).number;
+                double lhs = Clox_VM_Stack_Pop(vm).number;
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs > rhs));
+                vm->instruction_pointer += 1;
+            }break;
+            case OP_LESS: {
+                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
+                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
+                CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
+
+
+                double rhs = Clox_VM_Stack_Pop(vm).number;
+                double lhs = Clox_VM_Stack_Pop(vm).number;
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs < rhs));
+                vm->instruction_pointer += 1;
+            }break;
             default: {
 
                 return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR};

@@ -17,6 +17,9 @@ typedef enum {
     OP_MUL,
     OP_DIV,
     OP_BOOLEAN_NEGATION,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
 } Clox_Op_Code;
 
 typedef struct {

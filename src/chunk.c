@@ -118,6 +118,18 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             printf("OP_DIV\n");
             return offset + 1;
         } break;
+        case OP_LESS: {
+            printf("OP_LESS\n");
+            return offset + 1;
+        } break;
+        case OP_GREATER: {
+            printf("OP_GREATER\n");
+            return offset + 1;
+        } break;
+        case OP_EQUAL: {
+            printf("OP_EQUAL\n");
+            return offset + 1;
+        } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);
             return offset + 1;

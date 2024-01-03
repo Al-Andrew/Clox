@@ -53,13 +53,13 @@ static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_SLASH]         = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_FACTOR},
   [CLOX_TOKEN_STAR]          = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_FACTOR},
   [CLOX_TOKEN_BANG]          = {Clox_Compiler_Compile_Unary   , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_BANG_EQUAL]    = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_BANG_EQUAL]    = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_EQUALITY  },
   [CLOX_TOKEN_EQUAL]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_EQUAL_EQUAL]   = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_GREATER]       = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_GREATER_EQUAL] = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_LESS]          = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_LESS_EQUAL]    = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_EQUAL_EQUAL]   = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_EQUALITY  },
+  [CLOX_TOKEN_GREATER]       = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
+  [CLOX_TOKEN_GREATER_EQUAL] = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
+  [CLOX_TOKEN_LESS]          = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
+  [CLOX_TOKEN_LESS_EQUAL]    = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
   [CLOX_TOKEN_IDENTIFIER]    = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_STRING]        = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_NUMBER]        = {Clox_Compiler_Compile_Number  , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -250,6 +250,12 @@ static void Clox_Compiler_Compile_Binary(Clox_Parser* parser) {
     case CLOX_TOKEN_MINUS:         Clox_Compiler_Emit_Byte(parser, OP_SUB); break;
     case CLOX_TOKEN_STAR:          Clox_Compiler_Emit_Byte(parser, OP_MUL); break;
     case CLOX_TOKEN_SLASH:         Clox_Compiler_Emit_Byte(parser, OP_DIV); break;
+    case CLOX_TOKEN_EQUAL_EQUAL:   Clox_Compiler_Emit_Byte(parser, OP_EQUAL); break;
+    case CLOX_TOKEN_BANG_EQUAL:    Clox_Compiler_Emit_Bytes(parser, 2, OP_EQUAL, OP_BOOLEAN_NEGATION); break;
+    case CLOX_TOKEN_GREATER_EQUAL: Clox_Compiler_Emit_Bytes(parser, 2, OP_LESS, OP_BOOLEAN_NEGATION); break;
+    case CLOX_TOKEN_GREATER:       Clox_Compiler_Emit_Bytes(parser, 1, OP_GREATER); break;
+    case CLOX_TOKEN_LESS_EQUAL:    Clox_Compiler_Emit_Bytes(parser, 2, OP_GREATER, OP_BOOLEAN_NEGATION); break;
+    case CLOX_TOKEN_LESS:          Clox_Compiler_Emit_Bytes(parser, 1, OP_LESS); break;
     default: CLOX_UNREACHABLE();
   }
 }
