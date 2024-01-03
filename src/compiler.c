@@ -175,7 +175,7 @@ static inline void Clox_Compiler_Emit_Constant(Clox_Parser* parser, Clox_Value v
 
 static inline void Clox_Compiler_Compile_Number(Clox_Parser* parser) {
     double value = strtod(parser->previous.start, NULL);
-    Clox_Compiler_Emit_Constant(parser, (Clox_Value)value);
+    Clox_Compiler_Emit_Constant(parser, CLOX_VALUE_NUMBER(value));
 }
 
 static inline Clox_Parse_Rule* Clox_Get_Parse_Rule(Clox_Token_Type operator);

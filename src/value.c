@@ -18,7 +18,7 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
 
     if(chunk->values == NULL) {
         chunk->allocated = 8;
-        chunk->values = malloc(sizeof(uint8_t) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
+        chunk->values = malloc(sizeof(Clox_Value) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
         chunk->values[0] = op;
         chunk->used = 1;
         return;
@@ -26,7 +26,7 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
 
     if(chunk->used >= chunk->allocated) {
         chunk->allocated *= 2;
-        chunk->values = realloc(chunk->values, sizeof(uint8_t) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
+        chunk->values = realloc(chunk->values, sizeof(Clox_Value) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
         chunk->values[chunk->used] = op;
         chunk->used += 1;
         return;
@@ -38,5 +38,17 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
 }
 
 void Clox_Value_Print(Clox_Value value) {
-    printf("%g", (double)value);
+    switch(value.type) {
+        case CLOX_VALUE_TYPE_NIL: {
+            printf("(nil)");
+        } break;
+        case CLOX_VALUE_TYPE_BOOL: {
+            printf("%s", value.boolean == true? "true": "false");
+        } break;
+        case CLOX_VALUE_TYPE_NUMBER: {
+            printf("%g", value.number);
+        } break;
+        default:
+            CLOX_UNREACHABLE();
+    }
 }

@@ -10,16 +10,23 @@ void Clox_VM_Delete(Clox_VM* const vm) {
     // NOTE(Al-Andrew, Leak): do we own the chunk?
 }
 
-static void Clox_VM_Stack_Push(Clox_VM* const vm, Clox_Value const value) {
+static inline void Clox_VM_Stack_Push(Clox_VM* const vm, Clox_Value const value) {
     *(vm->stack_top++) = value;
 }
 
-static Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm) {
+static inline Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm) {
     return *(--vm->stack_top);
 }
 
+static inline Clox_Value Clox_VM_Stack_Peek(Clox_VM* const vm, uint32_t depth) {
+    return *(vm->stack_top - depth);
+}
+
 // NOTE(Al-Andrew): assumes `Clox_VM* const vm` is in scope and we're returning Clox_Interpret_Result
-#define CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(N) { if((vm->stack_top - vm->stack) < N) return (Clox_Interpret_Result){.status = INTERPRET_COMPILE_ERROR}; }
+#define CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(N) { if((vm->stack_top - vm->stack) < N) { return (Clox_Interpret_Result){.status = INTERPRET_COMPILE_ERROR}; } }
+// TODO(Al-Andrew, Diagnostics): better diagnostics 
+#define CLOX_VM_ASSURE_STACK_TYPE_0(T) { if(Clox_VM_Stack_Peek(vm, 0).type != T) { return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR}; } }
+#define CLOX_VM_ASSURE_STACK_TYPE_1(T) { if(Clox_VM_Stack_Peek(vm, 1).type != T) { return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR}; } }
 
 Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* const chunk) {
     vm->chunk = chunk;
@@ -60,41 +67,53 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
             }break;
             case OP_ARITHMETIC_NEGATION: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
+                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
 
-                Clox_Value value = Clox_VM_Stack_Pop(vm);
-                Clox_VM_Stack_Push(vm, -value);
+                double value = Clox_VM_Stack_Pop(vm).number;
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(-value));
                 vm->instruction_pointer += 1;
             }break;
             case OP_ADD: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
+                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
+                CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
 
-                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
-                Clox_Value rhs = Clox_VM_Stack_Pop(vm);
-                Clox_VM_Stack_Push(vm, lhs + rhs);
+                double lhs = Clox_VM_Stack_Pop(vm).number;
+                double rhs = Clox_VM_Stack_Pop(vm).number;
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs + rhs));
                 vm->instruction_pointer += 1;
             }break;
             case OP_SUB: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
+                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
+                CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
 
-                Clox_Value rhs = Clox_VM_Stack_Pop(vm);
-                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
-                Clox_VM_Stack_Push(vm, lhs - rhs);
+
+                double lhs = Clox_VM_Stack_Pop(vm).number;
+                double rhs = Clox_VM_Stack_Pop(vm).number;
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs - rhs));
                 vm->instruction_pointer += 1;
             }break;
             case OP_MUL: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
+                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
+                CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
 
-                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
-                Clox_Value rhs = Clox_VM_Stack_Pop(vm);
-                Clox_VM_Stack_Push(vm, lhs * rhs);
+
+                double lhs = Clox_VM_Stack_Pop(vm).number;
+                double rhs = Clox_VM_Stack_Pop(vm).number;
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs * rhs));
                 vm->instruction_pointer += 1;
             }break;
             case OP_DIV: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
+                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
+                CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
 
-                Clox_Value rhs = Clox_VM_Stack_Pop(vm);
-                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
-                Clox_VM_Stack_Push(vm, lhs / rhs);
+
+                double lhs = Clox_VM_Stack_Pop(vm).number;
+                double rhs = Clox_VM_Stack_Pop(vm).number;
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs / rhs));
                 vm->instruction_pointer += 1;
             }break;
             default: {
@@ -114,7 +133,7 @@ Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* vm, const char* source) 
     do {
 
         if (!Clox_Compile_Source_To_Chunk(source, &chunk)) {
-            result.return_value = 0;
+            result.return_value = CLOX_VALUE_NIL;
             result.status = INTERPRET_COMPILE_ERROR;            
             break;
         }
