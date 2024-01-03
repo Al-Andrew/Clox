@@ -3,6 +3,6 @@
 
 #include "chunk.h"
 
-bool Clox_Compile_Source_To_Chunk(const char* source, Clox_Chunk* chunk);
+bool Clox_Compile_Source_To_Chunk(Clox_VM* vm, const char* source, Clox_Chunk* chunk);
 
 #endif // CLOX_COMPILER_H_INCLUDED

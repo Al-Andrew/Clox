@@ -1,6 +1,7 @@
 #include "compiler.h"
 #include "scanner.h"
 #include "chunk.h"
+#include "object.h"
 
 #define CLOX_DEBUG_PRINT_COMPILED_CHUNKS
 
@@ -8,6 +9,7 @@ typedef struct {
     Clox_Token current;
     Clox_Token previous;
     Clox_Scanner* scanner;
+    Clox_VM* vm;
     bool had_error;
     bool panic_mode;
 } Clox_Parser;
@@ -38,6 +40,7 @@ static void Clox_Compiler_Compile_Unary(Clox_Parser* parser);
 static void Clox_Compiler_Compile_Binary(Clox_Parser* parser);
 static void Clox_Compiler_Compile_Grouping(Clox_Parser* parser);
 static void Clox_Compiler_Compile_Number(Clox_Parser* parser);
+static void Clox_Compiler_Compile_String(Clox_Parser* parser);
 static void Clox_Compiler_Compile_Literal(Clox_Parser* parser);
 
 static Clox_Parse_Rule parse_rules[] = {
@@ -61,7 +64,7 @@ static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_LESS]          = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
   [CLOX_TOKEN_LESS_EQUAL]    = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
   [CLOX_TOKEN_IDENTIFIER]    = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_STRING]        = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_STRING]        = {Clox_Compiler_Compile_String  , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_NUMBER]        = {Clox_Compiler_Compile_Number  , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_AND]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_CLASS]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -107,9 +110,9 @@ static inline void Clox_Compiler_Error_At_Current(Clox_Parser* parser) {
     Clox_Compiler_Error_At_Token(parser, &parser->current, parser->current.start);
 }
 
-static inline void Clox_Compiler_Error_At_Previous(Clox_Parser* parser) {
-    Clox_Compiler_Error_At_Token(parser, &parser->previous, parser->previous.start);
-}
+// static inline void Clox_Compiler_Error_At_Previous(Clox_Parser* parser) {
+//     Clox_Compiler_Error_At_Token(parser, &parser->previous, parser->previous.start);
+// }
 
 static inline void Clox_Compiler_Advance(Clox_Parser* parser) {
 
@@ -177,6 +180,10 @@ static inline void Clox_Compiler_Emit_Constant(Clox_Parser* parser, Clox_Value v
 static inline void Clox_Compiler_Compile_Number(Clox_Parser* parser) {
     double value = strtod(parser->previous.start, NULL);
     Clox_Compiler_Emit_Constant(parser, CLOX_VALUE_NUMBER(value));
+}
+
+static inline void Clox_Compiler_Compile_String(Clox_Parser* parser) {
+    Clox_Compiler_Emit_Constant(parser, CLOX_VALUE_OBJECT(Clox_String_Create(parser->vm, parser->previous.start + 1, parser->previous.length - 2)));
 }
 
 static inline void Clox_Compiler_Compile_Literal(Clox_Parser* parser) {
@@ -270,9 +277,10 @@ static inline void Clox_Compiler_End(Clox_Parser* parser) {
 
 
 
-bool Clox_Compile_Source_To_Chunk(const char* source, Clox_Chunk* chunk) {
+bool Clox_Compile_Source_To_Chunk(Clox_VM* vm, const char* source, Clox_Chunk* chunk) {
     Clox_Parser parser = {0};
     Clox_Scanner scanner = Clox_Scanner_New(source);
+    parser.vm = vm;
     parser.scanner = &scanner;
     compiling_chunk = chunk;
     

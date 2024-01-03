@@ -124,28 +124,6 @@ static inline bool Is_Identifier_Char(char c) {
             c == '_';
 }
 
-typedef struct {
-    const char* string;
-    int len;
-} s8;
-
-#define s8$(str) (s8){.string = str, .len = sizeof(str)}
-#define s8d$(str) (s8){.string = str, .len = strlen(str)}
-
-int s8_compare(s8 s1, s8 s2) {
-    int idx = 0;
-    int min_idx = s1.len > s2.len?s2.len:s1.len;
-    while(idx < min_idx) {
-        int diff = s1.string[idx] - s2.string[idx];
-        if( diff != 0 ) {
-            return diff;
-        }
-        ++idx;
-    }
-
-    return s1.len - s2.len;
-}
-
 static const s8 s_clox_keywords[] = {
     {ls8$("and")},
     {ls8$("class")},

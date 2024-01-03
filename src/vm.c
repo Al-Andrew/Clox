@@ -1,6 +1,7 @@
 #include "vm.h"
 #include "common.h"
 #include "compiler.h"
+#include <string.h>
 
 Clox_VM Clox_VM_New_Empty() {
     return (Clox_VM){0};
@@ -8,6 +9,12 @@ Clox_VM Clox_VM_New_Empty() {
 
 void Clox_VM_Delete(Clox_VM* const vm) {
     // NOTE(Al-Andrew, Leak): do we own the chunk?
+
+    Clox_Object* it = vm->objects;
+    while(it != NULL) {
+        free(it);
+        it = it->next_object;
+    }
 }
 
 static inline void Clox_VM_Stack_Push(Clox_VM* const vm, Clox_Value const value) {
@@ -104,13 +111,33 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
             }break;
             case OP_ADD: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
-                CLOX_VM_ASSURE_STACK_TYPE_0(CLOX_VALUE_TYPE_NUMBER);
-                CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
+                Clox_Value rhs = Clox_VM_Stack_Pop(vm);
+                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
 
-                double lhs = Clox_VM_Stack_Pop(vm).number;
-                double rhs = Clox_VM_Stack_Pop(vm).number;
-                Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs + rhs));
-                vm->instruction_pointer += 1;
+                if(lhs.type != rhs.type) {
+                    return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
+                }
+
+                if(CLOX_VALUE_IS_NUMBER(lhs) && CLOX_VALUE_IS_NUMBER(rhs)) {
+                    Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs.number + rhs.number));
+                    vm->instruction_pointer += 1;
+                }
+                else if(CLOX_VALUE_IS_STRING(lhs), CLOX_VALUE_IS_STRING(rhs)) {
+                    Clox_String* lhs_string = (Clox_String*)lhs.object;
+                    Clox_String* rhs_string = (Clox_String*)rhs.object;
+
+                    // TODO(Al-Andrew, GC): where does the memory for the old strings go?
+                    Clox_String* concat = (Clox_String*)Clox_Object_Allocate(vm, CLOX_OBJECT_TYPE_STRING, sizeof(Clox_String) + lhs_string->length + rhs_string->length + 1);
+                    concat->length = lhs_string->length + rhs_string->length;
+                    memcpy(concat->characters, lhs_string->characters, lhs_string->length);
+                    memcpy(concat->characters + lhs_string->length, rhs_string->characters, rhs_string->length);
+                    concat->characters[rhs_string->length + lhs_string->length] = '\0';
+
+                    Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(concat));
+                    vm->instruction_pointer += 1;
+                } else {
+                    return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
+                }
             }break;
             case OP_SUB: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
@@ -169,7 +196,20 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                         Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs.number == rhs.number));
                         vm->instruction_pointer += 1;
                     } break;
-                    default: CLOX_UNREACHABLE();
+                    case CLOX_VALUE_TYPE_OBJECT: {
+                        
+                        switch (lhs.object->type) {
+                            case CLOX_OBJECT_TYPE_STRING: {
+                                Clox_String* lhs_string = (Clox_String*)lhs.object;
+                                Clox_String* rhs_string = (Clox_String*)rhs.object;
+
+                                bool result = s8_compare((s8){.len = lhs_string->length, .string = lhs_string->characters}, (s8){.len = rhs_string->length, .string = rhs_string->characters}) == 0;
+                                Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(result));
+                                vm->instruction_pointer += 1;
+                            }break;
+                        }
+
+                    } break;
                 }
             }break;
             case OP_GREATER: {
@@ -210,7 +250,7 @@ Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* vm, const char* source) 
 
     do {
 
-        if (!Clox_Compile_Source_To_Chunk(source, &chunk)) {
+        if (!Clox_Compile_Source_To_Chunk(vm, source, &chunk)) {
             result.return_value = CLOX_VALUE_NIL;
             result.status = INTERPRET_COMPILE_ERROR;            
             break;

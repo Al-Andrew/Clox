@@ -48,6 +48,9 @@ void Clox_Value_Print(Clox_Value value) {
         case CLOX_VALUE_TYPE_NUMBER: {
             printf("%g", value.number);
         } break;
+        case CLOX_VALUE_TYPE_OBJECT: {
+            Clox_Object_Print(value.object);
+        } break;
         default:
             CLOX_UNREACHABLE();
     }

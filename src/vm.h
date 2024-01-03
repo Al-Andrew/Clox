@@ -10,12 +10,13 @@
 
 #define CLOX_MAX_STACK 512
 
-typedef struct {
+struct Clox_VM{
   Clox_Chunk* chunk;
   uint8_t* instruction_pointer;
   Clox_Value stack[CLOX_MAX_STACK];
   Clox_Value* stack_top;
-} Clox_VM;
+  Clox_Object* objects;
+};
 
 
 typedef enum {

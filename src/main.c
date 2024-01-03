@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 int Clox_Print_Help() {
 
@@ -17,13 +18,18 @@ int Clox_Print_Help() {
 
 int Clox_Repl() {
     Clox_VM vm = Clox_VM_New_Empty();
-
+    int* a = malloc(52);
+    (void)a;
     char line[1024];
     for (;;) {
         printf("> ");
 
         if (!fgets(line, sizeof(line), stdin)) {
             printf("\n");
+            break;
+        }
+
+        if(s8_compare((s8){.len = (int)strlen(line) - 1, .string = line}, s8$("exit")) == 0) {
             break;
         }
 
@@ -39,6 +45,7 @@ char* Clox_Read_File(const char* path_to_file) {
         printf("[Error] Could not get descriptor for file %s.\n", path_to_file);
         return NULL;
     }
+    
 
     if(file == NULL) {
         printf("[Error] Could not get descriptor for file %s.\n", path_to_file);

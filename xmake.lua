@@ -14,3 +14,5 @@ target("clox")
     
     add_files("src/**.c")
     add_headerfiles("src/**.h")
+
+    -- add_cflags("-fsanitize=address")
