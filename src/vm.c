@@ -1,6 +1,7 @@
 #include "vm.h"
 #include "common.h"
 #include "compiler.h"
+#include <float.h>
 #include <string.h>
 
 Clox_VM Clox_VM_New_Empty() {
@@ -10,6 +11,7 @@ Clox_VM Clox_VM_New_Empty() {
 void Clox_VM_Delete(Clox_VM* const vm) {
     // NOTE(Al-Andrew, Leak): do we own the chunk?
 
+    Clox_Hash_Table_Destory(&vm->strings);
     Clox_Object* it = vm->objects;
     while(it != NULL) {
         free(it);
@@ -127,13 +129,16 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                     Clox_String* rhs_string = (Clox_String*)rhs.object;
 
                     // TODO(Al-Andrew, GC): where does the memory for the old strings go?
-                    Clox_String* concat = (Clox_String*)Clox_Object_Allocate(vm, CLOX_OBJECT_TYPE_STRING, sizeof(Clox_String) + lhs_string->length + rhs_string->length + 1);
-                    concat->length = lhs_string->length + rhs_string->length;
-                    memcpy(concat->characters, lhs_string->characters, lhs_string->length);
-                    memcpy(concat->characters + lhs_string->length, rhs_string->characters, rhs_string->length);
-                    concat->characters[rhs_string->length + lhs_string->length] = '\0';
+                    // FIXME(Al-Andrwe): this is stupid
+                    char* concat = malloc(lhs_string->length + rhs_string->length + 1);
+                    unsigned int concat_length = lhs_string->length + rhs_string->length;
+                    memcpy(concat, lhs_string->characters, lhs_string->length);
+                    memcpy(concat + lhs_string->length, rhs_string->characters, rhs_string->length);
+                    concat[rhs_string->length + lhs_string->length] = '\0';
+                    Clox_String* concat_string = Clox_String_Create(vm, concat, concat_length);
+                    free(concat);
 
-                    Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(concat));
+                    Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(concat_string));
                     vm->instruction_pointer += 1;
                 } else {
                     return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};

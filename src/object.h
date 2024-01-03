@@ -23,6 +23,7 @@ void Clox_Object_Print(Clox_Object const* const object);
 typedef struct Clox_String Clox_String;
 struct Clox_String {
     Clox_Object obj;
+    uint32_t hash;
     uint32_t length;
     char characters[0];
 };

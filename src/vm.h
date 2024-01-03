@@ -7,6 +7,7 @@
 
 #include "chunk.h"
 #include "value.h"
+#include "hash_table.h"
 
 #define CLOX_MAX_STACK 512
 
@@ -16,6 +17,7 @@ struct Clox_VM{
   Clox_Value stack[CLOX_MAX_STACK];
   Clox_Value* stack_top;
   Clox_Object* objects;
+  Clox_Hash_Table strings;
 };
 
 
