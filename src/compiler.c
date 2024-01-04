@@ -371,6 +371,16 @@ static void Clox_Compiler_Patch_Jump(Clox_Parser* parser, int offset) {
     Clox_Compiler_Current_Chunk()->code[offset + 1] = jump & 0xff;
 }
 
+static void Clox_Compiler_Emit_Loop(Clox_Parser* parser, int loop_start) {
+    Clox_Compiler_Emit_Byte(parser, OP_LOOP);
+
+    int offset = Clox_Compiler_Current_Chunk()->used - loop_start + 2;
+    if (offset > UINT16_MAX) {
+        Clox_Compiler_Error(parser, "Loop body too large.");
+    }
+
+    Clox_Compiler_Emit_Bytes(parser, 2, (offset >> 8) & 0xff, offset & 0xff);
+}
 
 static void Clox_Compiler_Compile_If_Statement(Clox_Parser* parser) {
     Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
@@ -391,6 +401,21 @@ static void Clox_Compiler_Compile_If_Statement(Clox_Parser* parser) {
     Clox_Compiler_Patch_Jump(parser, elseJump);
 }
 
+static void Clox_Copmiler_Compile_While_Statement(Clox_Parser* parser) {
+    int loopStart = Clox_Compiler_Current_Chunk()->used;
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+    Clox_Compiler_Compile_Expression(parser);
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after condition."); 
+
+    int exitJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP_IF_FALSE);
+    Clox_Compiler_Emit_Byte(parser, OP_POP);
+    Clox_Compiler_Compile_Statement(parser); // NOTE(Al-Andrew): the loop body
+    Clox_Compiler_Emit_Loop(parser, loopStart);
+
+    Clox_Compiler_Patch_Jump(parser, exitJump);
+    Clox_Compiler_Emit_Byte(parser, OP_POP);
+}
+
 static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_PRINT)) {
         Clox_Compiler_Compile_Print_Statement(parser);
@@ -400,6 +425,8 @@ static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
         Clox_Compiler_End_Scope(parser);
     } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_IF)) {
         Clox_Compiler_Compile_If_Statement(parser);
+    } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_WHILE)) {
+        Clox_Copmiler_Compile_While_Statement(parser);
     } else {
         Clox_Compiler_Compile_Expression_Statement(parser);
     }
