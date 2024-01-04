@@ -4,5 +4,5 @@ fun fib(n) {
 }
 
 var start = GetSystemTimeInSeconds();
-print fib(1);
+print fib(11);
 print GetSystemTimeInSeconds() - start;
