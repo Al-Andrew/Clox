@@ -1,0 +1,7 @@
+var myvar = false;
+
+if (myvar) { 
+    print "it was true";
+} else {
+    print "it was false";
+}
