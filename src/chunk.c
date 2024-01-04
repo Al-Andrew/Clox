@@ -197,8 +197,9 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             return offset + 3;
         } break;
         case OP_CALL: {
-            printf("%-16s\n", "OP_CALL");
-            return offset + 1;
+            uint8_t argc = chunk->code[offset + 1];
+            printf("%-16s argc: %4d\n", "OP_CALL", argc);
+            return offset + 2;
         } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);
