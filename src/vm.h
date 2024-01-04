@@ -49,5 +49,6 @@ void Clox_VM_Delete(Clox_VM* const vm);
 
 Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* const chunk);
 Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* const vm, const char* source);
+void Clox_VM_Define_Native(Clox_VM* vm, const char* name, Clox_Native_Fn function);
 
 #endif // CLOX_VM_H_INCLUDED

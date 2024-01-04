@@ -10,6 +10,7 @@ struct Clox_VM;
 typedef enum {
     CLOX_OBJECT_TYPE_STRING,
     CLOX_OBJECT_TYPE_FUNCTION,
+    CLOX_OBJECT_TYPE_NATIVE,
 } Clox_Object_Type;
 
 typedef struct Clox_Object Clox_Object;
@@ -23,6 +24,15 @@ Clox_Object* Clox_Object_Allocate(Clox_VM* vm, Clox_Object_Type type, uint32_t s
 void Clox_Object_Deallocate(Clox_VM* vm, Clox_Object* object);
 void Clox_Object_Print(Clox_Object const* const object);
 
+
+typedef Clox_Value (*Clox_Native_Fn)(int argCount, Clox_Value* args);
+
+typedef struct {
+  Clox_Object obj;
+  Clox_Native_Fn function;
+} Clox_Native;
+
+Clox_Native* Clox_Native_Create(Clox_VM* vm, Clox_Native_Fn lambda);
 
 typedef struct Clox_String Clox_String;
 struct Clox_String {

@@ -3,16 +3,27 @@
 #include "compiler.h"
 #include <float.h>
 #include <string.h>
+#include <time.h>
 
-Clox_VM Clox_VM_New_Empty() {
-    return (Clox_VM){0};
-}
 
 void Clox_VM_Reset_Stack(Clox_VM* vm) {
     vm->stack_top = vm->stack;
     vm->call_frame_count = 0;
 }
 
+
+Clox_Value clock_native(int argc, Clox_Value* argv) {
+    return CLOX_VALUE_NUMBER((double)clock() / CLOCKS_PER_SEC);
+}
+
+Clox_VM Clox_VM_New_Empty() {
+    Clox_VM vm = {0};
+    Clox_VM_Reset_Stack(&vm);
+
+    Clox_VM_Define_Native(&vm, "GetSystemTimeInSeconds", clock_native);
+
+    return vm;
+}
 void Clox_VM_Delete(Clox_VM* const vm) {
     // NOTE(Al-Andrew, Leak): do we own the chunk?
 
@@ -88,14 +99,30 @@ static bool Clox_VM_Call(Clox_VM* vm, Clox_Function* callee, int argCount) {
 static bool Clox_VM_Call_Value(Clox_VM* vm, Clox_Value callee, int argCount) {
   if (CLOX_VALUE_IS_OBJECT(callee)) {
     switch (callee.object->type) {
-      case CLOX_OBJECT_TYPE_FUNCTION: 
-        return Clox_VM_Call(vm, (Clox_Function*)callee.object, argCount);
-      default:
-        break; // Non-callable object type.
+        case CLOX_OBJECT_TYPE_FUNCTION: {
+            return Clox_VM_Call(vm, (Clox_Function*)callee.object, argCount);
+        } break;
+        case CLOX_OBJECT_TYPE_NATIVE: {
+            Clox_Native* native = (Clox_Native*)callee.object;
+            Clox_Value result = native->function(argCount, vm->stack_top - argCount); // TODO(Al-Andrew): native functons can error out right?
+            vm->stack_top -= argCount + 1;
+            Clox_VM_Stack_Push(vm, result);
+            return true;
+        } break;
+        default:
+            break; // Non-callable object type.
     }
   }
   Clox_VM_Runtime_Error(vm, "Can only call functions and classes.");
   return false;
+}
+
+void Clox_VM_Define_Native(Clox_VM* vm, const char* name, Clox_Native_Fn function) {
+    Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(Clox_String_Create(vm, name, (int)strlen(name))));
+    Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(Clox_Native_Create(vm, function)));
+    Clox_Hash_Table_Set(&vm->globals, (Clox_String*)vm->stack[0].object, vm->stack[1]);
+    Clox_VM_Stack_Pop(vm);
+    Clox_VM_Stack_Pop(vm);
 }
 
 Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Function* function) {
@@ -218,8 +245,8 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
 
 
-                double lhs = Clox_VM_Stack_Pop(vm).number;
                 double rhs = Clox_VM_Stack_Pop(vm).number;
+                double lhs = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs - rhs));
             }break;
             case OP_MUL: {
@@ -238,8 +265,8 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 CLOX_VM_ASSURE_STACK_TYPE_1(CLOX_VALUE_TYPE_NUMBER);
 
 
-                double lhs = Clox_VM_Stack_Pop(vm).number;
                 double rhs = Clox_VM_Stack_Pop(vm).number;
+                double lhs = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs / rhs));
             }break;
             case OP_EQUAL: {
@@ -272,7 +299,7 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                                 bool result = s8_compare((s8){.len = lhs_string->length, .string = lhs_string->characters}, (s8){.len = rhs_string->length, .string = rhs_string->characters}) == 0;
                                 Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(result));
                             }break;
-                            case CLOX_OBJECT_TYPE_FUNCTION: {
+                            default: {
                                 CLOX_UNREACHABLE(); // TODO(Al-Andrew): 
                             } break;
                         }

@@ -18,7 +18,8 @@ Clox_Object* Clox_Object_Allocate(Clox_VM* vm, Clox_Object_Type type, uint32_t s
 
 void Clox_Object_Deallocate(Clox_VM* vm, Clox_Object* object) {
     switch (object->type) {
-        case CLOX_OBJECT_TYPE_STRING: {
+        case CLOX_OBJECT_TYPE_STRING: /* fallthrough */
+        case CLOX_OBJECT_TYPE_NATIVE: {
             free(object);
         } break;
         case CLOX_OBJECT_TYPE_FUNCTION: {
@@ -69,8 +70,12 @@ void Clox_Object_Print(Clox_Object const* const object) {
                 printf("<script>");
                 return;
             }
-            printf("function: %.*s", fn->name->length, fn->name->characters);
-        }
+            printf("<fn %.*s>", fn->name->length, fn->name->characters);
+        } break;
+        case CLOX_OBJECT_TYPE_NATIVE: {
+            Clox_Native* native = (Clox_Native*)object;
+            printf("<native %p>", native->function);
+        } break;
     }
 }
 
@@ -80,4 +85,11 @@ Clox_Function* Clox_Function_Create_Empty(Clox_VM* vm) {
     function->name = NULL;
     function->chunk = Clox_Chunk_New_Empty();
     return function;
+}
+
+Clox_Native* Clox_Native_Create(Clox_VM* vm, Clox_Native_Fn lambda) {
+    Clox_Native* native = (Clox_Native*)Clox_Object_Allocate(vm, CLOX_OBJECT_TYPE_NATIVE, sizeof(Clox_Native));
+    native->function = lambda;
+
+    return native;
 }
