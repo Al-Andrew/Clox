@@ -416,6 +416,53 @@ static void Clox_Copmiler_Compile_While_Statement(Clox_Parser* parser) {
     Clox_Compiler_Emit_Byte(parser, OP_POP);
 }
 
+static void Clox_Compiler_Compile_Variable_Declaration(Clox_Parser* parser);
+
+static void Clox_Copmiler_Compile_For_Statement(Clox_Parser* parser) {
+    Clox_Compiler_Begin_Scope(parser);
+    
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+    if (Clox_Compiler_Match(parser, CLOX_TOKEN_SEMICOLON)) {
+        // No initializer.
+    } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_VAR)) {
+        Clox_Compiler_Compile_Variable_Declaration(parser);
+    } else {
+        Clox_Compiler_Compile_Expression_Statement(parser);
+    }
+    int loopStart = Clox_Compiler_Current_Chunk()->used;
+
+    int exitJump = -1;
+    if (!Clox_Compiler_Match(parser,CLOX_TOKEN_SEMICOLON)) {
+        Clox_Compiler_Compile_Expression(parser);
+        Clox_Compiler_Consume(parser, CLOX_TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+
+        // Jump out of the loop if the condition is false.
+        exitJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP_IF_FALSE);
+        Clox_Compiler_Emit_Byte(parser, OP_POP); // Condition.
+    }
+    if (!Clox_Compiler_Match(parser, CLOX_TOKEN_RIGHT_PAREN)) {
+        int bodyJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP);
+        int incrementStart = Clox_Compiler_Current_Chunk()->used;
+        Clox_Compiler_Compile_Expression(parser);
+        Clox_Compiler_Emit_Byte(parser, OP_POP);
+        Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        Clox_Compiler_Emit_Loop(parser, loopStart);
+        loopStart = incrementStart;
+        Clox_Compiler_Patch_Jump(parser, bodyJump);
+    }
+    
+    Clox_Compiler_Compile_Statement(parser);
+    Clox_Compiler_Emit_Loop(parser, loopStart);
+
+    if (exitJump != -1) {
+        Clox_Compiler_Patch_Jump(parser, exitJump);
+        Clox_Compiler_Emit_Byte(parser, OP_POP); // Condition.
+    }
+
+    Clox_Compiler_End_Scope(parser);
+}
+
 static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_PRINT)) {
         Clox_Compiler_Compile_Print_Statement(parser);
@@ -427,6 +474,8 @@ static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
         Clox_Compiler_Compile_If_Statement(parser);
     } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_WHILE)) {
         Clox_Copmiler_Compile_While_Statement(parser);
+    } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_FOR)) {
+        Clox_Copmiler_Compile_For_Statement(parser);
     } else {
         Clox_Compiler_Compile_Expression_Statement(parser);
     }
@@ -463,8 +512,6 @@ static void Clox_Compiler_Synchronize(Clox_Parser* parser) {
 static uint8_t Clox_Compiler_Emit_Identifier_Constant(Clox_Parser* parser) {
     return Clox_Compiler_Make_Constant(parser ,CLOX_VALUE_OBJECT(Clox_String_Create(parser->vm, parser->previous.start, parser->previous.length)));
 }
-
-static void Clox_Compiler_Compile_Variable_Declaration(Clox_Parser* parser);
 
 static void Clox_Compiler_Mark_Local_Initialized(Clox_Parser* parser) {
     parser->compiler->locals[parser->compiler->localCount - 1].depth = parser->compiler->scopeDepth;
