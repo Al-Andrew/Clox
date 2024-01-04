@@ -18,8 +18,6 @@ int Clox_Print_Help() {
 
 int Clox_Repl() {
     Clox_VM vm = Clox_VM_New_Empty();
-    int* a = malloc(52);
-    (void)a;
     char line[1024];
     for (;;) {
         printf("> ");
