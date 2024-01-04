@@ -1,0 +1,5 @@
+fun doStuff() {
+    print "doing stuff!";
+}
+
+print doStuff; // print function name

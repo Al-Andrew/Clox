@@ -1,0 +1,10 @@
+fun hey() {
+    return 5;
+}
+
+fun add(a, b) {
+    return a + b;
+}
+
+print hey();
+print add(5, 3);
