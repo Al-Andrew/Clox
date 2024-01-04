@@ -1,0 +1,4 @@
+var what = "what, what";
+what = what + " in the butt!";
+
+print what; // expect "what, what in the butt!";
