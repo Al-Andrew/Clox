@@ -134,6 +134,10 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             printf("OP_PRINT\n");
             return offset + 1;
         } break;
+        case OP_POP: {
+            printf("OP_POP\n");
+            return offset + 1;
+        } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);
             return offset + 1;

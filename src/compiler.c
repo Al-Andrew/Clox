@@ -281,9 +281,17 @@ static void Clox_Compiler_Compile_Print_Statement(Clox_Parser* parser) {
     Clox_Compiler_Emit_Byte(parser, OP_PRINT);
 }
 
+static void Clox_Compiler_Compile_Expression_Statement(Clox_Parser* parser) {
+    Clox_Compiler_Compile_Expression(parser);
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_SEMICOLON, "Expect ';' after value.");
+    Clox_Compiler_Emit_Byte(parser, OP_POP);
+}
+
 static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_PRINT)) {
         Clox_Compiler_Compile_Print_Statement(parser);
+    } else {
+        Clox_Compiler_Compile_Expression_Statement(parser);
     }
 }
 

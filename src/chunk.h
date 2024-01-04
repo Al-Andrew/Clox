@@ -21,6 +21,7 @@ typedef enum {
     OP_GREATER,
     OP_LESS,
     OP_PRINT,
+    OP_POP,
 } Clox_Op_Code;
 
 typedef struct {

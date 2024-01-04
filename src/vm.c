@@ -246,6 +246,12 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 printf("\n");
                 vm->instruction_pointer += 1;
             } break;
+            case OP_POP: {
+                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
+                Clox_Value value = Clox_VM_Stack_Pop(vm);
+                (void)value;
+                vm->instruction_pointer += 1;
+            } break;
             default: {
 
                 return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR};
