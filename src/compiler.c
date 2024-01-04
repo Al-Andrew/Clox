@@ -13,7 +13,14 @@ typedef struct {
     int depth;
 } Clox_Local;
 
+typedef enum {
+  CLOX_FUNCTION_TYPE_FUNCTION,
+  CLOX_FUNCTION_TYPE_SCRIPT
+} Clox_Function_Type;
+
 typedef struct {
+    Clox_Function* function;
+    Clox_Function_Type type;
     Clox_Local locals[UINT8_MAX + 1];
     int localCount;
     int scopeDepth;
@@ -28,6 +35,20 @@ typedef struct {
     bool had_error;
     bool panic_mode;
 } Clox_Parser;
+
+static void Clox_Compiler_Init(Clox_Parser* parser, Clox_Compiler* compiler, Clox_Function_Type type) {
+    compiler->function = NULL;
+    compiler->type = type;
+    compiler->localCount = 0;
+    compiler->scopeDepth = 0;
+    memset(compiler->locals, 0, sizeof(compiler->locals));
+    compiler->function = Clox_Function_Create_Empty(parser->vm);
+
+    Clox_Local* local = &parser->compiler->locals[parser->compiler->localCount++];
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
+}
 
 typedef enum {
     CLOX_PRECEDENCE_NONE,
@@ -169,14 +190,14 @@ static inline bool Clox_Compiler_Match(Clox_Parser* parser, Clox_Token_Type type
     return true;
 }
 
-static Clox_Chunk* compiling_chunk;
-static Clox_Chunk* Clox_Compiler_Current_Chunk() {
-  return compiling_chunk;
+// static Clox_Chunk* compiling_chunk;
+static Clox_Chunk* Clox_Compiler_Current_Chunk(Clox_Parser* parser) {
+  return &parser->compiler->function->chunk;
 }
 
 static inline void Clox_Compiler_Emit_Byte(Clox_Parser* parser, uint8_t byte) {
 
-    Clox_Chunk_Push(Clox_Compiler_Current_Chunk(), byte, parser->previous.line);
+    Clox_Chunk_Push(Clox_Compiler_Current_Chunk(parser), byte, parser->previous.line);
 }
 
 static inline void Clox_Compiler_Emit_Bytes(Clox_Parser* parser, uint32_t count, ...) {
@@ -186,14 +207,14 @@ static inline void Clox_Compiler_Emit_Bytes(Clox_Parser* parser, uint32_t count,
  
     for(unsigned int i = 0; i < count; ++i) {
         uint8_t byte = va_arg(args, int);
-        Clox_Chunk_Push(Clox_Compiler_Current_Chunk(), byte, parser->previous.line);
+        Clox_Chunk_Push(Clox_Compiler_Current_Chunk(parser), byte, parser->previous.line);
     }
  
     va_end(args);
 }
 
 static inline uint8_t Clox_Compiler_Make_Constant(Clox_Parser* parser, Clox_Value value) {
-  int constant = Clox_Chunk_Push_Constant(Clox_Compiler_Current_Chunk(), value);
+  int constant = Clox_Chunk_Push_Constant(Clox_Compiler_Current_Chunk(parser), value);
   
   if (constant > UINT8_MAX) {
     Clox_Compiler_Error_At_Token(parser, &parser->previous, "Too many constants in one chunk.");
@@ -356,25 +377,25 @@ static void Clox_Compiler_Compile_Statement(Clox_Parser* parser);
 
 static int Clox_Compiler_Emit_Jump(Clox_Parser* parser, uint8_t instruction) {
     Clox_Compiler_Emit_Bytes(parser, 3, instruction, 0xff, 0xff);
-    return Clox_Compiler_Current_Chunk()->used - 2;
+    return Clox_Compiler_Current_Chunk(parser)->used - 2;
 }
 
 static void Clox_Compiler_Patch_Jump(Clox_Parser* parser, int offset) {
     // NOTE(Al-Andrew): -2 to adjust for the bytecode for the jump offset itself.
-    int jump = Clox_Compiler_Current_Chunk()->used - offset - 2;
+    int jump = Clox_Compiler_Current_Chunk(parser)->used - offset - 2;
 
     if (jump > UINT16_MAX) {
         Clox_Compiler_Error(parser, "Too much code to jump over.");
     }
 
-    Clox_Compiler_Current_Chunk()->code[offset] = (jump >> 8) & 0xff;
-    Clox_Compiler_Current_Chunk()->code[offset + 1] = jump & 0xff;
+    Clox_Compiler_Current_Chunk(parser)->code[offset] = (jump >> 8) & 0xff;
+    Clox_Compiler_Current_Chunk(parser)->code[offset + 1] = jump & 0xff;
 }
 
 static void Clox_Compiler_Emit_Loop(Clox_Parser* parser, int loop_start) {
     Clox_Compiler_Emit_Byte(parser, OP_LOOP);
 
-    int offset = Clox_Compiler_Current_Chunk()->used - loop_start + 2;
+    int offset = Clox_Compiler_Current_Chunk(parser)->used - loop_start + 2;
     if (offset > UINT16_MAX) {
         Clox_Compiler_Error(parser, "Loop body too large.");
     }
@@ -402,7 +423,7 @@ static void Clox_Compiler_Compile_If_Statement(Clox_Parser* parser) {
 }
 
 static void Clox_Copmiler_Compile_While_Statement(Clox_Parser* parser) {
-    int loopStart = Clox_Compiler_Current_Chunk()->used;
+    int loopStart = Clox_Compiler_Current_Chunk(parser)->used;
     Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
     Clox_Compiler_Compile_Expression(parser);
     Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after condition."); 
@@ -429,7 +450,7 @@ static void Clox_Copmiler_Compile_For_Statement(Clox_Parser* parser) {
     } else {
         Clox_Compiler_Compile_Expression_Statement(parser);
     }
-    int loopStart = Clox_Compiler_Current_Chunk()->used;
+    int loopStart = Clox_Compiler_Current_Chunk(parser)->used;
 
     int exitJump = -1;
     if (!Clox_Compiler_Match(parser,CLOX_TOKEN_SEMICOLON)) {
@@ -442,7 +463,7 @@ static void Clox_Copmiler_Compile_For_Statement(Clox_Parser* parser) {
     }
     if (!Clox_Compiler_Match(parser, CLOX_TOKEN_RIGHT_PAREN)) {
         int bodyJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP);
-        int incrementStart = Clox_Compiler_Current_Chunk()->used;
+        int incrementStart = Clox_Compiler_Current_Chunk(parser)->used;
         Clox_Compiler_Compile_Expression(parser);
         Clox_Compiler_Emit_Byte(parser, OP_POP);
         Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
@@ -664,20 +685,22 @@ static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser) {
     Clox_Compiler_Emit_Byte(parser, OP_RETURN);
 }
 
-static inline void Clox_Compiler_End(Clox_Parser* parser) {
+static inline Clox_Function* Clox_Compiler_End(Clox_Parser* parser) {
     Clox_Compiler_Emit_Return(parser);
+    return parser->compiler->function;
 }
 
 
 
-bool Clox_Compile_Source_To_Chunk(Clox_VM* vm, const char* source, Clox_Chunk* chunk) {
+Clox_Function* Clox_Compile_Source_To_Function(Clox_VM* vm, const char* source) {
     Clox_Parser parser = {0};
     Clox_Scanner scanner = Clox_Scanner_New(source);
     Clox_Compiler compiler = {0};
     parser.vm = vm;
     parser.scanner = &scanner;
     parser.compiler = &compiler;
-    compiling_chunk = chunk;
+    Clox_Compiler_Init(&parser, &compiler, CLOX_FUNCTION_TYPE_SCRIPT);
+    // compiling_chunk = chunk;
     
     Clox_Compiler_Advance(&parser);
     
@@ -685,15 +708,12 @@ bool Clox_Compile_Source_To_Chunk(Clox_VM* vm, const char* source, Clox_Chunk* c
         Clox_Compiler_Compile_Declaration(&parser);
     }
 
-    Clox_Compiler_End(&parser);
+    Clox_Function* fn = Clox_Compiler_End(&parser);
 
 #ifdef CLOX_DEBUG_PRINT_COMPILED_CHUNKS
     if (!parser.had_error) {
-        printf("Compiled chunk: \n");
-        Clox_Chunk_Print(Clox_Compiler_Current_Chunk(), "code");
-        printf("End of compiled chunk.\n");
-        printf("==========\n");
+        Clox_Chunk_Print(Clox_Compiler_Current_Chunk(&parser), fn->name != NULL ? fn->name->characters : "<script>");
     }
 #endif
-    return !parser.had_error;
+    return parser.had_error?NULL: fn;
 }

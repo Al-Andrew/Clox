@@ -8,6 +8,11 @@ Clox_VM Clox_VM_New_Empty() {
     return (Clox_VM){0};
 }
 
+void Clox_VM_Reset_Stack(Clox_VM* vm) {
+    vm->stack_top = vm->stack;
+    vm->call_frame_count = 0;
+}
+
 void Clox_VM_Delete(Clox_VM* const vm) {
     // NOTE(Al-Andrew, Leak): do we own the chunk?
 
@@ -16,7 +21,7 @@ void Clox_VM_Delete(Clox_VM* const vm) {
     Clox_Object* it = vm->objects;
     while(it != NULL) {
         Clox_Object* next = it->next_object;
-        free(it);
+        Clox_Object_Deallocate(vm, it);
         it = next;
     }
 }
@@ -46,18 +51,30 @@ static Clox_Interpret_Result Clox_VM_Runtime_Error(Clox_VM* vm, char const* cons
     vfprintf(stderr, fmt, args);
     va_end(args);
     fputs("\n", stderr);
+    Clox_Call_Frame* frame = &vm->frames[vm->call_frame_count - 1];
+    size_t instruction = frame->instruction_pointer - frame->function->chunk.code - 1;
+    int line = frame->function->chunk.source_lines[instruction];
+    fprintf(stderr, "[line %d] in script\n", line);
 
     return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
 }
 
-Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* const chunk) {
-    vm->chunk = chunk;
-    vm->instruction_pointer = vm->chunk->code;
-    vm->stack_top = vm->stack;
+Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Function* function) {
+    // vm->chunk = chunk;
 
+    Clox_Call_Frame* frame = &vm->frames[vm->call_frame_count - 1];
+    #define READ_BYTE() (*frame->instruction_pointer++)
+
+    #define READ_SHORT() \
+        (frame->instruction_pointer += 2, \
+        (uint16_t)((frame->instruction_pointer[-2] << 8) | frame->instruction_pointer[-1]))
+
+    #define READ_CONSTANT() \
+        (frame->function->chunk.constants.values[READ_BYTE()])
+
+    #define READ_STRING() ((Clox_String*)READ_CONSTANT().object)
 
     for (;;) {
-        Clox_Op_Code opcode = (Clox_Op_Code)vm->instruction_pointer[0];
         
         #ifdef CLOX_DEBUG_TRACE_STACK
         printf("[");
@@ -70,9 +87,10 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
         #endif // CLOX_DEBUG_TRACE_STACK
 
         #ifdef CLOX_DEBUG_TRACE_EXECUTION
-        Clox_Chunk_Print_Op_Code(vm->chunk, (uint32_t)(vm->instruction_pointer - vm->chunk->code));
+        Clox_Chunk_Print_Op_Code(&frame->function->chunk, (uint32_t)(frame->instruction_pointer - frame->function->chunk.code));
         #endif // CLOX_DEBUG_TRACE_EXECUTION
 
+        Clox_Op_Code opcode = (Clox_Op_Code)READ_BYTE();
 
         switch (opcode) {
             // case OP_RETURN: {
@@ -82,22 +100,17 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
             //     return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_OK};
             // }break;
             case OP_CONSTANT: {
-                uint8_t constant_idx = vm->instruction_pointer[1];
-                Clox_Value constant_value = vm->chunk->constants.values[(size_t)constant_idx]; 
+                Clox_Value constant_value = READ_CONSTANT();
                 Clox_VM_Stack_Push(vm, constant_value);
-                vm->instruction_pointer += 2;
             }break;
             case OP_NIL: {
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NIL);
-                vm->instruction_pointer += 1;
             } break;
             case OP_TRUE: {
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(true));
-                vm->instruction_pointer += 1;
             } break;
             case OP_FALSE: {
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(false));
-                vm->instruction_pointer += 1;
             } break;
             case OP_ARITHMETIC_NEGATION: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
@@ -105,7 +118,6 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
 
                 double value = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(-value));
-                vm->instruction_pointer += 1;
             }break;
             case OP_BOOLEAN_NEGATION: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
@@ -114,11 +126,9 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 if(top_type == CLOX_VALUE_TYPE_NIL) {
                     Clox_VM_Stack_Pop(vm); // pop the nil of the stack
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(true));
-                    vm->instruction_pointer += 1;
                 } else if (top_type == CLOX_VALUE_TYPE_BOOL) {
                     bool value = Clox_VM_Stack_Pop(vm).boolean;
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(!value));
-                    vm->instruction_pointer += 1;
                 } else {
                     // TODO(Al-Andrew, Diagnostic): diagnostic
                     return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_RUNTIME_ERROR};
@@ -135,7 +145,6 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
 
                 if(CLOX_VALUE_IS_NUMBER(lhs) && CLOX_VALUE_IS_NUMBER(rhs)) {
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs.number + rhs.number));
-                    vm->instruction_pointer += 1;
                 }
                 else if(CLOX_VALUE_IS_STRING(lhs), CLOX_VALUE_IS_STRING(rhs)) {
                     Clox_String* lhs_string = (Clox_String*)lhs.object;
@@ -152,7 +161,6 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                     free(concat);
 
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(concat_string));
-                    vm->instruction_pointer += 1;
                 } else {
                     return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
                 }
@@ -166,7 +174,6 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 double lhs = Clox_VM_Stack_Pop(vm).number;
                 double rhs = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs - rhs));
-                vm->instruction_pointer += 1;
             }break;
             case OP_MUL: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
@@ -177,7 +184,6 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 double lhs = Clox_VM_Stack_Pop(vm).number;
                 double rhs = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs * rhs));
-                vm->instruction_pointer += 1;
             }break;
             case OP_DIV: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
@@ -188,7 +194,6 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 double lhs = Clox_VM_Stack_Pop(vm).number;
                 double rhs = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs / rhs));
-                vm->instruction_pointer += 1;
             }break;
             case OP_EQUAL: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
@@ -197,22 +202,18 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
 
                 if(lhs.type != rhs.type) {
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(false));
-                    vm->instruction_pointer += 1;
                     break;
                 }
 
                 switch(lhs.type) {
                     case CLOX_VALUE_TYPE_NIL: {
                         Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(true));
-                        vm->instruction_pointer += 1;
                     } break;
                     case CLOX_VALUE_TYPE_BOOL: {
                         Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs.boolean == rhs.boolean));
-                        vm->instruction_pointer += 1;
                     } break;
                     case CLOX_VALUE_TYPE_NUMBER: {
                         Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs.number == rhs.number));
-                        vm->instruction_pointer += 1;
                     } break;
                     case CLOX_VALUE_TYPE_OBJECT: {
                         
@@ -223,9 +224,12 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
 
                                 bool result = s8_compare((s8){.len = lhs_string->length, .string = lhs_string->characters}, (s8){.len = rhs_string->length, .string = rhs_string->characters}) == 0;
                                 Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(result));
-                                vm->instruction_pointer += 1;
                             }break;
+                            case CLOX_OBJECT_TYPE_FUNCTION: {
+                                CLOX_UNREACHABLE(); // TODO(Al-Andrew): 
+                            } break;
                         }
+
 
                     } break;
                 }
@@ -239,7 +243,6 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 double rhs = Clox_VM_Stack_Pop(vm).number;
                 double lhs = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs > rhs));
-                vm->instruction_pointer += 1;
             }break;
             case OP_LESS: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
@@ -250,104 +253,92 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 double rhs = Clox_VM_Stack_Pop(vm).number;
                 double lhs = Clox_VM_Stack_Pop(vm).number;
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs < rhs));
-                vm->instruction_pointer += 1;
             }break;
             case OP_PRINT: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
                 Clox_Value value = Clox_VM_Stack_Pop(vm);
                 Clox_Value_Print(value);
                 printf("\n");
-                vm->instruction_pointer += 1;
             } break;
             case OP_POP: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
                 Clox_Value value = Clox_VM_Stack_Pop(vm);
                 (void)value;
-                vm->instruction_pointer += 1;
             } break;
             case OP_DEFINE_GLOBAL: {
-                uint8_t variable_name_index = vm->instruction_pointer[1];
-                Clox_String* name = (Clox_String*)chunk->constants.values[variable_name_index].object;
+                Clox_String* name = READ_STRING();
                 Clox_Value value = Clox_VM_Stack_Pop(vm);
                 Clox_Hash_Table_Set(&vm->globals, name, value);
-                vm->instruction_pointer += 2;
             } break;
             case OP_GET_GLOBAL: {
-                uint8_t variable_name_index = vm->instruction_pointer[1];
-                Clox_String* name = (Clox_String*)chunk->constants.values[variable_name_index].object;
+                Clox_String* name = READ_STRING();
                 Clox_Value value = {0};
                 if(!Clox_Hash_Table_Get(&vm->globals, name, &value)) {
                     return Clox_VM_Runtime_Error(vm, "Undefined variable '%s'.", name->characters);
                 }
                 Clox_VM_Stack_Push(vm, value);
-                vm->instruction_pointer += 2;
             } break;
             case OP_SET_GLOBAL: {
-                uint8_t variable_name_index = vm->instruction_pointer[1];
-                Clox_String* name = (Clox_String*)chunk->constants.values[variable_name_index].object;
+                Clox_String* name = READ_STRING();
                 if (Clox_Hash_Table_Set(&vm->globals, name, Clox_VM_Stack_Peek(vm, 0))) { // NOTE(Al-Andrew): we generate a pop instruction for the expression. thats why we only peek here
                     Clox_Hash_Table_Remove(&vm->globals, name); 
                     return Clox_VM_Runtime_Error(vm, "Undefined variable '%s'.", name->characters);
                 }
-                vm->instruction_pointer += 2;
             } break;
             case OP_GET_LOCAL: {
-                uint8_t variable_index = vm->instruction_pointer[1];
+                uint8_t variable_index = READ_BYTE();
 
-                Clox_VM_Stack_Push(vm, vm->stack[variable_index]); 
-                vm->instruction_pointer += 2;
+                Clox_VM_Stack_Push(vm, frame->slots[variable_index] ); 
             } break;
             case OP_SET_LOCAL: {
-                uint8_t variable_index = vm->instruction_pointer[1];
+                uint8_t variable_index = READ_BYTE();
                 Clox_Value value = Clox_VM_Stack_Peek(vm, 0);
-                vm->stack[variable_index] = value;
-                vm->instruction_pointer += 2;
+                frame->slots[variable_index] = value;
             } break;
             case OP_JUMP: {
-                uint16_t offset = (uint16_t)((vm->instruction_pointer[1] << 8) | vm->instruction_pointer[2]);
-                vm->instruction_pointer += 3;
-                vm->instruction_pointer += offset;
+                uint16_t offset = READ_SHORT();
+                frame->instruction_pointer += offset;
             } break;
             case OP_JUMP_IF_FALSE: {
-                uint16_t offset = (uint16_t)((vm->instruction_pointer[1] << 8) | vm->instruction_pointer[2]);
+                uint16_t offset = READ_SHORT();
                 Clox_Value condition = Clox_VM_Stack_Peek(vm, 0);
-                vm->instruction_pointer += 3;
                 if (Clox_Value_Is_Falsy(condition)) {
-                    vm->instruction_pointer += offset;
+                    frame->instruction_pointer += offset;
                 }
             } break;
             case OP_LOOP: {
-                uint16_t offset = (uint16_t)((vm->instruction_pointer[1] << 8) | vm->instruction_pointer[2]);
-                vm->instruction_pointer += 3;
-                vm->instruction_pointer -= offset;
+                uint16_t offset = READ_SHORT();
+                frame->instruction_pointer -= offset;
             } break;
             default: {
 
                 return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR, .message = "Unknown instruction."};
             }break;
-        }
-    }
+        } // end switch
+    } // end for
 
     CLOX_UNREACHABLE();
 }
 
 Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* vm, const char* source) {
-    Clox_Chunk chunk = Clox_Chunk_New_Empty();
     Clox_Interpret_Result result = {0};
+    Clox_VM_Reset_Stack(vm);
 
     do {
-
-        if (!Clox_Compile_Source_To_Chunk(vm, source, &chunk)) {
+        Clox_Function* top_level_function = Clox_Compile_Source_To_Function(vm, source); 
+        if (top_level_function == NULL) {
             result.return_value = CLOX_VALUE_NIL;
             result.status = INTERPRET_COMPILE_ERROR;            
             break;
         }
 
-        vm->chunk = &chunk;
-        vm->instruction_pointer = vm->chunk->code;
-        result = Clox_VM_Interpret_Chunk(vm, &chunk);
+        Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(top_level_function));
+        Clox_Call_Frame* frame = &vm->frames[vm->call_frame_count++];
+        frame->function = top_level_function;
+        frame->instruction_pointer = top_level_function->chunk.code;
+        frame->slots = vm->stack;
+        result = Clox_VM_Interpret_Function(vm, top_level_function);
     } while(false);
 
-    Clox_Chunk_Delete(&chunk);
     return result;
 }

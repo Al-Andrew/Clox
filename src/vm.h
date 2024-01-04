@@ -9,11 +9,20 @@
 #include "value.h"
 #include "hash_table.h"
 
-#define CLOX_MAX_STACK 512
+#define CLOX_MAX_CALL_FRAMES 64
+#define CLOX_MAX_STACK (CLOX_MAX_CALL_FRAMES * (UINT8_MAX + 1))
+
+typedef struct {
+  Clox_Function* function;
+  uint8_t* instruction_pointer;
+  Clox_Value* slots;
+} Clox_Call_Frame;
 
 struct Clox_VM{
   Clox_Chunk* chunk;
   uint8_t* instruction_pointer;
+  Clox_Call_Frame frames[CLOX_MAX_CALL_FRAMES];
+  int call_frame_count;
   Clox_Value stack[CLOX_MAX_STACK];
   Clox_Value* stack_top;
   Clox_Object* objects;

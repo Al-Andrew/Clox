@@ -2,7 +2,7 @@
 #define CLOX_CHUNK_H_INCLUDED
 
 #include "common.h"
-#include "value.h"
+#include "value_array.h"
 #include <stdint.h>
 
 typedef enum {

@@ -1,6 +1,6 @@
 #include "chunk.h"
 #include "common.h"
-
+#include "value.h"
 
 Clox_Chunk Clox_Chunk_New_Empty() {
     return (Clox_Chunk){0};
@@ -47,12 +47,13 @@ uint32_t Clox_Chunk_Push_Constant(Clox_Chunk* const chunk, Clox_Value const valu
 void Clox_Chunk_Print(Clox_Chunk* const chunk, char const* const name) {
     CLOX_DEV_ASSERT(chunk != NULL);
     
-    printf("== %s ==\n", name);
+    printf("== BEGIN %s ==\n", name);
     
     for(uint32_t offset = 0; offset < chunk->used;) {
         offset = Clox_Chunk_Print_Op_Code(chunk, offset);
     }
 
+    printf("== END   %s ==\n", name);
     return;
 }
 

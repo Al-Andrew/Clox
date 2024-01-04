@@ -16,6 +16,19 @@ Clox_Object* Clox_Object_Allocate(Clox_VM* vm, Clox_Object_Type type, uint32_t s
     return retval;
 }
 
+void Clox_Object_Deallocate(Clox_VM* vm, Clox_Object* object) {
+    switch (object->type) {
+        case CLOX_OBJECT_TYPE_STRING: {
+            free(object);
+        } break;
+        case CLOX_OBJECT_TYPE_FUNCTION: {
+            Clox_Function* function = (Clox_Function*)object;
+            Clox_Chunk_Delete(&function->chunk);
+            free(object);
+        } break;
+    }
+}
+
 static uint32_t fnv_1a(const char* key, int length) {
   uint32_t hash = 2166136261u;
   for (int i = 0; i < length; i++) {
@@ -50,5 +63,21 @@ void Clox_Object_Print(Clox_Object const* const object) {
             Clox_String* string = (Clox_String*)object;
             printf("\"%.*s\"", string->length, string->characters);
         } break;
+        case CLOX_OBJECT_TYPE_FUNCTION: {
+            Clox_Function* fn = (Clox_Function*)object;
+            if (fn->name == NULL) {
+                printf("<script>");
+                return;
+            }
+            printf("function: %.*s", fn->name->length, fn->name->characters);
+        }
     }
+}
+
+Clox_Function* Clox_Function_Create_Empty(Clox_VM* vm) {
+    Clox_Function* function = (Clox_Function*)Clox_Object_Allocate(vm, CLOX_OBJECT_TYPE_FUNCTION,sizeof(Clox_Function));
+    function->arity = 0;
+    function->name = NULL;
+    function->chunk = Clox_Chunk_New_Empty();
+    return function;
 }

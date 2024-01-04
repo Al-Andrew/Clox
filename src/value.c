@@ -1,3 +1,4 @@
+#include "value_array.h"
 #include "value.h"
 
 

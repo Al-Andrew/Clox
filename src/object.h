@@ -2,12 +2,14 @@
 #define CLOX_OBJECT_H_INCLUDED
 
 #include <stdint.h>
+#include "chunk.h"
 
 typedef struct Clox_VM Clox_VM;
 struct Clox_VM;
 
 typedef enum {
     CLOX_OBJECT_TYPE_STRING,
+    CLOX_OBJECT_TYPE_FUNCTION,
 } Clox_Object_Type;
 
 typedef struct Clox_Object Clox_Object;
@@ -18,7 +20,9 @@ struct Clox_Object {
 
 
 Clox_Object* Clox_Object_Allocate(Clox_VM* vm, Clox_Object_Type type, uint32_t size);
+void Clox_Object_Deallocate(Clox_VM* vm, Clox_Object* object);
 void Clox_Object_Print(Clox_Object const* const object);
+
 
 typedef struct Clox_String Clox_String;
 struct Clox_String {
@@ -29,5 +33,16 @@ struct Clox_String {
 };
 
 Clox_String* Clox_String_Create(Clox_VM* vm, const char* string, uint32_t len);
+
+typedef struct Clox_Function Clox_Function;
+struct Clox_Function {
+  Clox_Object obj;
+  int arity;
+  Clox_Chunk chunk;
+  Clox_String* name;
+};
+
+
+Clox_Function* Clox_Function_Create_Empty(Clox_VM* vm);
 
 #endif // CLOX_OBJECT_H_INCLUDED
