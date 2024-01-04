@@ -4,6 +4,7 @@
 #include "object.h"
 #include <stdint.h>
 #include <string.h>
+#include <winerror.h>
 
 #define CLOX_DEBUG_PRINT_COMPILED_CHUNKS
 
@@ -18,13 +19,15 @@ typedef enum {
   CLOX_FUNCTION_TYPE_SCRIPT
 } Clox_Function_Type;
 
-typedef struct {
+typedef struct Clox_Compiler Clox_Compiler;
+struct Clox_Compiler {
+    Clox_Compiler* enclosing;
     Clox_Function* function;
     Clox_Function_Type type;
     Clox_Local locals[UINT8_MAX + 1];
     int localCount;
     int scopeDepth;
-} Clox_Compiler;
+};
 
 typedef struct {
     Clox_Token current;
@@ -37,6 +40,7 @@ typedef struct {
 } Clox_Parser;
 
 static void Clox_Compiler_Init(Clox_Parser* parser, Clox_Compiler* compiler, Clox_Function_Type type) {
+    compiler->enclosing = parser->compiler;
     compiler->function = NULL;
     compiler->type = type;
     compiler->localCount = 0;
@@ -44,10 +48,21 @@ static void Clox_Compiler_Init(Clox_Parser* parser, Clox_Compiler* compiler, Clo
     memset(compiler->locals, 0, sizeof(compiler->locals));
     compiler->function = Clox_Function_Create_Empty(parser->vm);
 
+    parser->compiler = compiler;
+    if (type != CLOX_FUNCTION_TYPE_SCRIPT) {
+        parser->compiler->function->name = Clox_String_Create(parser->vm, parser->previous.start, parser->previous.length);
+    }
     Clox_Local* local = &parser->compiler->locals[parser->compiler->localCount++];
     local->depth = 0;
     local->name.start = "";
     local->name.length = 0;
+}
+static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser);
+static inline Clox_Function* Clox_Compiler_End(Clox_Parser* parser) {
+    Clox_Compiler_Emit_Return(parser);
+    Clox_Function* to_return = parser->compiler->function;
+    parser->compiler = parser->compiler->enclosing;
+    return to_return;
 }
 
 typedef enum {
@@ -81,9 +96,10 @@ static void Clox_Compiler_Compile_Literal(Clox_Parser* parser, bool);
 static void Clox_Compiler_Compile_Variable(Clox_Parser* parser, bool);
 static void Clox_Compiler_Compile_And_(Clox_Parser* parser, bool);
 static void Clox_Compiler_Compile_Or_(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_Call(Clox_Parser* parser, bool);
 
 static Clox_Parse_Rule parse_rules[] = {
-  [CLOX_TOKEN_LEFT_PAREN]    = {Clox_Compiler_Compile_Grouping, NULL, CLOX_PRECEDENCE_NONE},
+  [CLOX_TOKEN_LEFT_PAREN]    = {Clox_Compiler_Compile_Grouping, Clox_Compiler_Compile_Call  , CLOX_PRECEDENCE_CALL  },
   [CLOX_TOKEN_RIGHT_PAREN]   = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_LEFT_BRACE]    = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  }, 
   [CLOX_TOKEN_RIGHT_BRACE]   = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -484,6 +500,21 @@ static void Clox_Copmiler_Compile_For_Statement(Clox_Parser* parser) {
     Clox_Compiler_End_Scope(parser);
 }
 
+static void Clox_Copmiler_Compile_Return_Statement(Clox_Parser* parser) {
+
+    if (parser->compiler->type == CLOX_FUNCTION_TYPE_SCRIPT) {
+        Clox_Compiler_Error(parser, "Can't return from top-level code.");
+    }
+
+    if (Clox_Compiler_Match(parser, CLOX_TOKEN_SEMICOLON)) {
+        Clox_Compiler_Emit_Return(parser);
+    } else {
+        Clox_Compiler_Compile_Expression(parser);
+        Clox_Compiler_Consume(parser, CLOX_TOKEN_SEMICOLON, "Expect ';' after return value.");
+        Clox_Compiler_Emit_Byte(parser, OP_RETURN);
+    }
+}
+
 static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_PRINT)) {
         Clox_Compiler_Compile_Print_Statement(parser);
@@ -497,6 +528,8 @@ static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
         Clox_Copmiler_Compile_While_Statement(parser);
     } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_FOR)) {
         Clox_Copmiler_Compile_For_Statement(parser);
+    } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_RETURN)) {
+        Clox_Copmiler_Compile_Return_Statement(parser);
     } else {
         Clox_Compiler_Compile_Expression_Statement(parser);
     }
@@ -535,6 +568,7 @@ static uint8_t Clox_Compiler_Emit_Identifier_Constant(Clox_Parser* parser) {
 }
 
 static void Clox_Compiler_Mark_Local_Initialized(Clox_Parser* parser) {
+    if (parser->compiler->scopeDepth == 0) return;
     parser->compiler->locals[parser->compiler->localCount - 1].depth = parser->compiler->scopeDepth;
 }
 
@@ -550,7 +584,7 @@ static void Clox_Compiler_Add_Local(Clox_Parser* parser, Clox_Token token) {
 }
 
 static bool Clox_Identifiers_Compare(Clox_Token* a, Clox_Token* b) {
-    if (a->length != b->length) return false;
+    if (a->length != b->length) return a->length - b->length;
     return memcmp(a->start, b->start, a->length);
 }
 
@@ -606,9 +640,42 @@ static void Clox_Compiler_Compile_Variable_Declaration(Clox_Parser* parser) {
     Clox_Compiler_Emit_Define_Variable(parser, global);
 }
 
+static void Clox_Compiler_Emit_Fuction(Clox_Parser* parser, Clox_Function_Type type) {
+    Clox_Compiler compiler;
+    Clox_Compiler_Init(parser,&compiler, type);
+    Clox_Compiler_Begin_Scope(parser); 
+
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+    if (!Clox_Compiler_Check(parser, CLOX_TOKEN_RIGHT_PAREN)) {
+        do {
+            parser->compiler->function->arity++;
+            if (parser->compiler->function->arity > 255) {
+                Clox_Compiler_Error_At_Token(parser, &parser->current, "Can't have more than 255 parameters.");
+            }
+            uint8_t constant = Clox_Compiler_Parse_Variable(parser, "Expect parameter name.");
+            Clox_Compiler_Emit_Define_Variable(parser, constant);
+        } while (Clox_Compiler_Match(parser, CLOX_TOKEN_COMMA));
+    }
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+    Clox_Compiler_Compile_Block(parser);
+
+    Clox_Function* function = Clox_Compiler_End(parser);
+    Clox_Compiler_Emit_Bytes(parser, 2, OP_CONSTANT, Clox_Compiler_Make_Constant(parser, CLOX_VALUE_OBJECT(function)));
+}
+
+static void Clox_Compiler_Compile_Function_Declaration(Clox_Parser* parser) {
+    uint8_t global = Clox_Compiler_Parse_Variable(parser, "Expect function name.");
+    Clox_Compiler_Mark_Local_Initialized(parser);
+    Clox_Compiler_Emit_Fuction(parser, CLOX_FUNCTION_TYPE_FUNCTION);
+    Clox_Compiler_Emit_Define_Variable(parser, global);
+}
+
 static void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_VAR)) {
         Clox_Compiler_Compile_Variable_Declaration(parser);
+    } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_FUN)) {
+        Clox_Compiler_Compile_Function_Declaration(parser);
     } else {
         Clox_Compiler_Compile_Statement(parser);
     }
@@ -682,12 +749,31 @@ static void Clox_Compiler_Compile_Or_(Clox_Parser* parser, bool can_assign) {
 }
 
 static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser) {
-    Clox_Compiler_Emit_Byte(parser, OP_RETURN);
+    Clox_Compiler_Emit_Bytes(parser, 2, OP_NIL, OP_RETURN);
 }
 
-static inline Clox_Function* Clox_Compiler_End(Clox_Parser* parser) {
-    Clox_Compiler_Emit_Return(parser);
-    return parser->compiler->function;
+static uint8_t Clox_Compiler_Compile_Argument_List(Clox_Parser* parser) {
+    uint8_t argCount = 0;
+    if (!Clox_Compiler_Check(parser, CLOX_TOKEN_RIGHT_PAREN)) {
+        do {
+            Clox_Compiler_Compile_Expression(parser);
+            argCount++;
+        } while (Clox_Compiler_Match(parser, CLOX_TOKEN_COMMA));
+    }
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+    return argCount;
+}
+
+static void Clox_Compiler_Compile_Call(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
+
+    uint8_t argCount = Clox_Compiler_Compile_Argument_List(parser);
+
+    if (argCount == 255) {
+        Clox_Compiler_Error(parser, "Can't have more than 255 arguments.");
+    }
+
+    Clox_Compiler_Emit_Bytes(parser, 2, OP_CALL, argCount);
 }
 
 

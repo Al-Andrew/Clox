@@ -51,12 +51,51 @@ static Clox_Interpret_Result Clox_VM_Runtime_Error(Clox_VM* vm, char const* cons
     vfprintf(stderr, fmt, args);
     va_end(args);
     fputs("\n", stderr);
-    Clox_Call_Frame* frame = &vm->frames[vm->call_frame_count - 1];
-    size_t instruction = frame->instruction_pointer - frame->function->chunk.code - 1;
-    int line = frame->function->chunk.source_lines[instruction];
-    fprintf(stderr, "[line %d] in script\n", line);
 
+    for (int i = vm->call_frame_count - 1; i >= 0; i--) {
+        Clox_Call_Frame* frame = &vm->frames[i];
+        Clox_Function* function = frame->function;
+        size_t instruction = frame->instruction_pointer - function->chunk.code - 1;
+        fprintf(stderr, "[line %d] in ", function->chunk.source_lines[instruction]);
+        if (function->name == NULL) {
+            fprintf(stderr, "script\n");
+        } else {
+            fprintf(stderr, "%s()\n", function->name->characters);
+        }
+    }
+
+    Clox_VM_Reset_Stack(vm);
     return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
+}
+
+static bool Clox_VM_Call(Clox_VM* vm, Clox_Function* callee, int argCount) {
+
+    if (argCount != callee->arity) {
+        Clox_VM_Runtime_Error(vm, "Expected %d arguments but got %d.", callee->arity, argCount);
+        return false;
+    }
+    if (vm->call_frame_count == CLOX_MAX_CALL_FRAMES) {
+        Clox_VM_Runtime_Error(vm, "Stack overflow.");
+        return false;
+    }
+    Clox_Call_Frame* frame = &vm->frames[vm->call_frame_count++];
+    frame->function = callee;
+    frame->instruction_pointer = callee->chunk.code;
+    frame->slots = vm->stack_top - argCount - 1;
+    return true;
+}
+
+static bool Clox_VM_Call_Value(Clox_VM* vm, Clox_Value callee, int argCount) {
+  if (CLOX_VALUE_IS_OBJECT(callee)) {
+    switch (callee.object->type) {
+      case CLOX_OBJECT_TYPE_FUNCTION: 
+        return Clox_VM_Call(vm, (Clox_Function*)callee.object, argCount);
+      default:
+        break; // Non-callable object type.
+    }
+  }
+  Clox_VM_Runtime_Error(vm, "Can only call functions and classes.");
+  return false;
 }
 
 Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Function* function) {
@@ -93,12 +132,20 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
         Clox_Op_Code opcode = (Clox_Op_Code)READ_BYTE();
 
         switch (opcode) {
-            // case OP_RETURN: {
-            //     CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
+            case OP_RETURN: {
+                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
                 
-            //     vm->instruction_pointer += 1;
-            //     return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_OK};
-            // }break;
+                Clox_Value result = Clox_VM_Stack_Pop(vm);
+                vm->call_frame_count--;
+                if (vm->call_frame_count == 0) {
+                    Clox_VM_Stack_Pop(vm); //this pops the <script> function off the stack
+                    return (Clox_Interpret_Result){.status = INTERPRET_OK, .return_value = result};
+                }
+
+                vm->stack_top = frame->slots;
+                Clox_VM_Stack_Push(vm, result);
+                frame = &vm->frames[vm->call_frame_count - 1];
+            }break;
             case OP_CONSTANT: {
                 Clox_Value constant_value = READ_CONSTANT();
                 Clox_VM_Stack_Push(vm, constant_value);
@@ -310,6 +357,13 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 uint16_t offset = READ_SHORT();
                 frame->instruction_pointer -= offset;
             } break;
+            case OP_CALL: {
+                int argCount = READ_BYTE();
+                if (!Clox_VM_Call_Value(vm, Clox_VM_Stack_Peek(vm, argCount), argCount)) {
+                    return Clox_VM_Runtime_Error(vm, "Error while trying to call.");
+                }
+                frame = &vm->frames[vm->call_frame_count - 1];
+            } break;
             default: {
 
                 return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR, .message = "Unknown instruction."};
@@ -333,10 +387,8 @@ Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* vm, const char* source) 
         }
 
         Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(top_level_function));
-        Clox_Call_Frame* frame = &vm->frames[vm->call_frame_count++];
-        frame->function = top_level_function;
-        frame->instruction_pointer = top_level_function->chunk.code;
-        frame->slots = vm->stack;
+        Clox_VM_Call(vm, top_level_function, 0);
+
         result = Clox_VM_Interpret_Function(vm, top_level_function);
     } while(false);
 

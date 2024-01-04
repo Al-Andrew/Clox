@@ -32,9 +32,9 @@ struct Clox_VM{
 
 
 typedef enum {
-  INTERPRET_COMPILE_ERROR = 0,
-  INTERPRET_RUNTIME_ERROR,
   INTERPRET_OK,
+  INTERPRET_COMPILE_ERROR,
+  INTERPRET_RUNTIME_ERROR,
 } Clox_Interpret_Status;
 
 typedef struct {
