@@ -15,8 +15,9 @@ void Clox_VM_Delete(Clox_VM* const vm) {
     Clox_Hash_Table_Destory(&vm->globals);
     Clox_Object* it = vm->objects;
     while(it != NULL) {
+        Clox_Object* next = it->next_object;
         free(it);
-        it = it->next_object;
+        it = next;
     }
 }
 
@@ -284,10 +285,22 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
             case OP_SET_GLOBAL: {
                 uint8_t variable_name_index = vm->instruction_pointer[1];
                 Clox_String* name = (Clox_String*)chunk->constants.values[variable_name_index].object;
-                if (Clox_Hash_Table_Set(&vm->globals, name, Clox_VM_Stack_Peek(vm, 0))) {
+                if (Clox_Hash_Table_Set(&vm->globals, name, Clox_VM_Stack_Peek(vm, 0))) { // NOTE(Al-Andrew): we generate a pop instruction for the expression. thats why we only peek here
                     Clox_Hash_Table_Remove(&vm->globals, name); 
                     return Clox_VM_Runtime_Error(vm, "Undefined variable '%s'.", name->characters);
                 }
+                vm->instruction_pointer += 2;
+            } break;
+            case OP_GET_LOCAL: {
+                uint8_t variable_index = vm->instruction_pointer[1];
+
+                Clox_VM_Stack_Push(vm, vm->stack[variable_index]); 
+                vm->instruction_pointer += 2;
+            } break;
+            case OP_SET_LOCAL: {
+                uint8_t variable_index = vm->instruction_pointer[1];
+                Clox_Value value = Clox_VM_Stack_Peek(vm, 0);
+                vm->stack[variable_index] = value;
                 vm->instruction_pointer += 2;
             } break;
             default: {

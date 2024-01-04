@@ -159,6 +159,18 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             printf("'\n");
             return offset + 2;
         } break;
+        case OP_GET_LOCAL: {
+            uint8_t var_name_idx = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_GET_LOCAL", var_name_idx);
+            printf("'\n");
+            return offset + 2;
+        } break;
+        case OP_SET_LOCAL: {
+            uint8_t var_name_idx = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_SET_LOCAL", var_name_idx);
+            printf("'\n");
+            return offset + 2;
+        } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);
             return offset + 1;
