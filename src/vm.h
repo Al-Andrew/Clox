@@ -18,6 +18,7 @@ struct Clox_VM{
   Clox_Value* stack_top;
   Clox_Object* objects;
   Clox_Hash_Table strings;
+  Clox_Hash_Table globals;
 };
 
 
@@ -29,6 +30,7 @@ typedef enum {
 
 typedef struct {
     Clox_Interpret_Status status;
+    char const * message;
     Clox_Value  return_value;
 } Clox_Interpret_Result;
 

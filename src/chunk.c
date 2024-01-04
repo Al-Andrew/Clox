@@ -138,6 +138,27 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             printf("OP_POP\n");
             return offset + 1;
         } break;
+        case OP_DEFINE_GLOBAL: {
+            uint8_t var_name_idx = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_DEFINE_GLOBAL", var_name_idx);
+            Clox_Value_Print(chunk->constants.values[var_name_idx]);
+            printf("'\n");
+            return offset + 2;
+        } break;
+        case OP_GET_GLOBAL: {
+            uint8_t var_name_idx = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_GET_GLOBAL", var_name_idx);
+            Clox_Value_Print(chunk->constants.values[var_name_idx]);
+            printf("'\n");
+            return offset + 2;
+        } break;
+        case OP_SET_GLOBAL: {
+            uint8_t var_name_idx = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_SET_GLOBAL", var_name_idx);
+            Clox_Value_Print(chunk->constants.values[var_name_idx]);
+            printf("'\n");
+            return offset + 2;
+        } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);
             return offset + 1;

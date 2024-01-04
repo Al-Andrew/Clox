@@ -12,6 +12,7 @@ void Clox_VM_Delete(Clox_VM* const vm) {
     // NOTE(Al-Andrew, Leak): do we own the chunk?
 
     Clox_Hash_Table_Destory(&vm->strings);
+    Clox_Hash_Table_Destory(&vm->globals);
     Clox_Object* it = vm->objects;
     while(it != NULL) {
         free(it);
@@ -31,11 +32,22 @@ static inline Clox_Value Clox_VM_Stack_Peek(Clox_VM* const vm, uint32_t depth) {
     return *(vm->stack_top - 1 - depth);
 }
 
+
 // NOTE(Al-Andrew): assumes `Clox_VM* const vm` is in scope and we're returning Clox_Interpret_Result
 #define CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(N) { if((vm->stack_top - vm->stack) < N) { return (Clox_Interpret_Result){.status = INTERPRET_COMPILE_ERROR}; } }
 // TODO(Al-Andrew, Diagnostics): better diagnostics 
 #define CLOX_VM_ASSURE_STACK_TYPE_0(T) { if(Clox_VM_Stack_Peek(vm, 0).type != T) { return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR}; } }
 #define CLOX_VM_ASSURE_STACK_TYPE_1(T) { if(Clox_VM_Stack_Peek(vm, 1).type != T) { return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR}; } }
+
+static Clox_Interpret_Result Clox_VM_Runtime_Error(Clox_VM* vm, char const* const fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fputs("\n", stderr);
+
+    return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
+}
 
 Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* const chunk) {
     vm->chunk = chunk;
@@ -252,9 +264,35 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 (void)value;
                 vm->instruction_pointer += 1;
             } break;
+            case OP_DEFINE_GLOBAL: {
+                uint8_t variable_name_index = vm->instruction_pointer[1];
+                Clox_String* name = (Clox_String*)chunk->constants.values[variable_name_index].object;
+                Clox_Value value = Clox_VM_Stack_Pop(vm);
+                Clox_Hash_Table_Set(&vm->globals, name, value);
+                vm->instruction_pointer += 2;
+            } break;
+            case OP_GET_GLOBAL: {
+                uint8_t variable_name_index = vm->instruction_pointer[1];
+                Clox_String* name = (Clox_String*)chunk->constants.values[variable_name_index].object;
+                Clox_Value value = {0};
+                if(!Clox_Hash_Table_Get(&vm->globals, name, &value)) {
+                    return Clox_VM_Runtime_Error(vm, "Undefined variable '%s'.", name->characters);
+                }
+                Clox_VM_Stack_Push(vm, value);
+                vm->instruction_pointer += 2;
+            } break;
+            case OP_SET_GLOBAL: {
+                uint8_t variable_name_index = vm->instruction_pointer[1];
+                Clox_String* name = (Clox_String*)chunk->constants.values[variable_name_index].object;
+                if (Clox_Hash_Table_Set(&vm->globals, name, Clox_VM_Stack_Peek(vm, 0))) {
+                    Clox_Hash_Table_Remove(&vm->globals, name); 
+                    return Clox_VM_Runtime_Error(vm, "Undefined variable '%s'.", name->characters);
+                }
+                vm->instruction_pointer += 2;
+            } break;
             default: {
 
-                return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR};
+                return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR, .message = "Unknown instruction."};
             }break;
         }
     }

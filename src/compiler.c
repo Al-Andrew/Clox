@@ -2,6 +2,7 @@
 #include "scanner.h"
 #include "chunk.h"
 #include "object.h"
+#include <stdint.h>
 
 #define CLOX_DEBUG_PRINT_COMPILED_CHUNKS
 
@@ -28,7 +29,7 @@ typedef enum {
     CLOX_PRECEDENCE_PRIMARY
 } Clox_Precedence;
 
-typedef void (*Clox_Parse_Fn)(Clox_Parser*);
+typedef void (*Clox_Parse_Fn)(Clox_Parser*, bool);
 
 typedef struct {
   Clox_Parse_Fn prefix;
@@ -36,12 +37,13 @@ typedef struct {
   Clox_Precedence precedence;
 } Clox_Parse_Rule;
 
-static void Clox_Compiler_Compile_Unary(Clox_Parser* parser);
-static void Clox_Compiler_Compile_Binary(Clox_Parser* parser);
-static void Clox_Compiler_Compile_Grouping(Clox_Parser* parser);
-static void Clox_Compiler_Compile_Number(Clox_Parser* parser);
-static void Clox_Compiler_Compile_String(Clox_Parser* parser);
-static void Clox_Compiler_Compile_Literal(Clox_Parser* parser);
+static void Clox_Compiler_Compile_Unary(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_Binary(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_Grouping(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_Number(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_String(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_Literal(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_Variable(Clox_Parser* parser, bool);
 
 static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_LEFT_PAREN]    = {Clox_Compiler_Compile_Grouping, NULL, CLOX_PRECEDENCE_NONE},
@@ -63,7 +65,7 @@ static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_GREATER_EQUAL] = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
   [CLOX_TOKEN_LESS]          = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
   [CLOX_TOKEN_LESS_EQUAL]    = {NULL                          , Clox_Compiler_Compile_Binary, CLOX_PRECEDENCE_COMPARISON  },
-  [CLOX_TOKEN_IDENTIFIER]    = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_IDENTIFIER]    = {Clox_Compiler_Compile_Variable, NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_STRING]        = {Clox_Compiler_Compile_String  , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_NUMBER]        = {Clox_Compiler_Compile_Number  , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_AND]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -185,16 +187,19 @@ static inline void Clox_Compiler_Emit_Constant(Clox_Parser* parser, Clox_Value v
     Clox_Compiler_Emit_Bytes(parser, 2, OP_CONSTANT, Clox_Compiler_Make_Constant(parser, value));
 }
 
-static inline void Clox_Compiler_Compile_Number(Clox_Parser* parser) {
+static inline void Clox_Compiler_Compile_Number(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
     double value = strtod(parser->previous.start, NULL);
     Clox_Compiler_Emit_Constant(parser, CLOX_VALUE_NUMBER(value));
 }
 
-static inline void Clox_Compiler_Compile_String(Clox_Parser* parser) {
+static inline void Clox_Compiler_Compile_String(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
     Clox_Compiler_Emit_Constant(parser, CLOX_VALUE_OBJECT(Clox_String_Create(parser->vm, parser->previous.start + 1, parser->previous.length - 2)));
 }
 
-static inline void Clox_Compiler_Compile_Literal(Clox_Parser* parser) {
+static inline void Clox_Compiler_Compile_Literal(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
     switch (parser->previous.type) {
         case CLOX_TOKEN_FALSE: Clox_Compiler_Emit_Byte(parser, OP_FALSE); break;
         case CLOX_TOKEN_NIL: Clox_Compiler_Emit_Byte(parser, OP_NIL); break;
@@ -213,12 +218,17 @@ static void Clox_Compiler_Parse_Precendence(Clox_Parser* parser, Clox_Precedence
         return;
     }
 
-    prefix_rule(parser);
+    bool canAssign = precedence <= CLOX_PRECEDENCE_ASSIGNMENT;
+    prefix_rule(parser, canAssign);
 
     while (precedence <= Clox_Get_Parse_Rule(parser->current.type)->precedence) {
         Clox_Compiler_Advance(parser);
         Clox_Parse_Fn infix_rule = Clox_Get_Parse_Rule(parser->previous.type)->infix;
-        infix_rule(parser);
+        infix_rule(parser, canAssign);
+    }
+
+    if (canAssign && Clox_Compiler_Match(parser, CLOX_TOKEN_EQUAL)) {
+        Clox_Compiler_Error_At_Token(parser, &parser->previous, "Invalid assignment target.");
     }
 }
 
@@ -226,12 +236,14 @@ static inline void Clox_Compiler_Compile_Expression(Clox_Parser* parser) {
     Clox_Compiler_Parse_Precendence(parser, CLOX_PRECEDENCE_ASSIGNMENT);
 }
 
-static void Clox_Compiler_Compile_Grouping(Clox_Parser* parser) {
+static void Clox_Compiler_Compile_Grouping(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
     Clox_Compiler_Compile_Expression(parser);
     Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-static void Clox_Compiler_Compile_Unary(Clox_Parser* parser) {
+static void Clox_Compiler_Compile_Unary(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
     Clox_Token_Type operator = parser->previous.type;
 
     // Compile the operand.
@@ -255,7 +267,8 @@ static inline Clox_Parse_Rule* Clox_Get_Parse_Rule(Clox_Token_Type operator) {
     return &parse_rules[operator];
 }
 
-static void Clox_Compiler_Compile_Binary(Clox_Parser* parser) {
+static void Clox_Compiler_Compile_Binary(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
   Clox_Token_Type operator = parser->previous.type;
   Clox_Parse_Rule* rule = Clox_Get_Parse_Rule(operator);
   Clox_Compiler_Parse_Precendence(parser, (Clox_Precedence)(rule->precedence + 1));
@@ -323,12 +336,57 @@ static void Clox_Compiler_Synchronize(Clox_Parser* parser) {
     }
 }
 
+static uint8_t Clox_Compiler_Emit_Identifier_Constant(Clox_Parser* parser) {
+    return Clox_Compiler_Make_Constant(parser ,CLOX_VALUE_OBJECT(Clox_String_Create(parser->vm, parser->previous.start, parser->previous.length)));
+}
+
+static uint8_t Clox_Compiler_Parse_Variable(Clox_Parser* parser, char const * const message) {
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_IDENTIFIER, message);
+    return Clox_Compiler_Emit_Identifier_Constant(parser);
+}
+
+static void Clox_Compiler_Emit_Define_Variable(Clox_Parser* parser, uint8_t global) {
+    Clox_Compiler_Emit_Bytes(parser, 2, OP_DEFINE_GLOBAL, global);
+}
+
+static void Clox_Compiler_Compile_Variable_Declaration(Clox_Parser* parser) {
+    uint8_t global = Clox_Compiler_Parse_Variable(parser, "Expect variable name.");
+
+    if (Clox_Compiler_Match(parser, CLOX_TOKEN_EQUAL)) {
+        Clox_Compiler_Compile_Expression(parser);
+    } else {
+        Clox_Compiler_Emit_Byte(parser, OP_NIL);
+    }
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+    Clox_Compiler_Emit_Define_Variable(parser, global);
+}
+
 static void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
-    Clox_Compiler_Compile_Statement(parser);
+    if (Clox_Compiler_Match(parser, CLOX_TOKEN_VAR)) {
+        Clox_Compiler_Compile_Variable_Declaration(parser);
+    } else {
+        Clox_Compiler_Compile_Statement(parser);
+    }
     
     if (parser->panic_mode) {
         Clox_Compiler_Synchronize(parser);
     }
+}
+
+static inline void Clox_Compiler_Compile_Named_Variable(Clox_Parser* parser, bool can_assign) {
+    uint8_t arg = Clox_Compiler_Emit_Identifier_Constant(parser);
+
+    if (can_assign && Clox_Compiler_Match(parser, CLOX_TOKEN_EQUAL)) {
+        Clox_Compiler_Compile_Expression(parser);
+        Clox_Compiler_Emit_Bytes(parser, 2, OP_SET_GLOBAL, arg);
+    } else {
+    Clox_Compiler_Emit_Bytes(parser, 2, OP_GET_GLOBAL, arg);
+    }
+}
+
+static inline void Clox_Compiler_Compile_Variable(Clox_Parser* parser, bool can_assign) {
+    Clox_Compiler_Compile_Named_Variable(parser, can_assign);
 }
 
 static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser) {
