@@ -295,8 +295,40 @@ static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
     }
 }
 
+static void Clox_Compiler_Synchronize(Clox_Parser* parser) {
+    parser->panic_mode = false;
+
+    while (parser->current.type != CLOX_TOKEN_EOF) {
+        if (parser->previous.type == CLOX_TOKEN_SEMICOLON) {  
+            return;
+        }
+
+        switch (parser->current.type) {
+            case CLOX_TOKEN_CLASS: /* fallthrough */
+            case CLOX_TOKEN_FUN: /* fallthrough */
+            case CLOX_TOKEN_VAR: /* fallthrough */
+            case CLOX_TOKEN_FOR: /* fallthrough */
+            case CLOX_TOKEN_IF: /* fallthrough */
+            case CLOX_TOKEN_WHILE: /* fallthrough */
+            case CLOX_TOKEN_PRINT: /* fallthrough */
+            case CLOX_TOKEN_RETURN: {
+                return;
+            } break;
+            default: {
+                /* no-op */
+            } break;
+        }
+
+        Clox_Compiler_Advance(parser);
+    }
+}
+
 static void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
     Clox_Compiler_Compile_Statement(parser);
+    
+    if (parser->panic_mode) {
+        Clox_Compiler_Synchronize(parser);
+    }
 }
 
 static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser) {
