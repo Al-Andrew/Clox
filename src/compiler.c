@@ -58,6 +58,8 @@ static void Clox_Compiler_Compile_Number(Clox_Parser* parser, bool);
 static void Clox_Compiler_Compile_String(Clox_Parser* parser, bool);
 static void Clox_Compiler_Compile_Literal(Clox_Parser* parser, bool);
 static void Clox_Compiler_Compile_Variable(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_And_(Clox_Parser* parser, bool);
+static void Clox_Compiler_Compile_Or_(Clox_Parser* parser, bool);
 
 static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_LEFT_PAREN]    = {Clox_Compiler_Compile_Grouping, NULL, CLOX_PRECEDENCE_NONE},
@@ -82,7 +84,7 @@ static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_IDENTIFIER]    = {Clox_Compiler_Compile_Variable, NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_STRING]        = {Clox_Compiler_Compile_String  , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_NUMBER]        = {Clox_Compiler_Compile_Number  , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_AND]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_AND]           = {Clox_Compiler_Compile_And_    , NULL                        , CLOX_PRECEDENCE_AND  },
   [CLOX_TOKEN_CLASS]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_ELSE]          = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_FALSE]         = {Clox_Compiler_Compile_Literal , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -90,7 +92,7 @@ static Clox_Parse_Rule parse_rules[] = {
   [CLOX_TOKEN_FUN]           = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_IF]            = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_NIL]           = {Clox_Compiler_Compile_Literal , NULL                        , CLOX_PRECEDENCE_NONE  },
-  [CLOX_TOKEN_OR]            = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
+  [CLOX_TOKEN_OR]            = {Clox_Compiler_Compile_Or_     , NULL                        , CLOX_PRECEDENCE_OR  },
   [CLOX_TOKEN_PRINT]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_RETURN]        = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
   [CLOX_TOKEN_SUPER]         = {NULL                          , NULL                        , CLOX_PRECEDENCE_NONE  },
@@ -350,6 +352,44 @@ static void Clox_Compiler_End_Scope(Clox_Parser* parser) {
     }
 }
 
+static void Clox_Compiler_Compile_Statement(Clox_Parser* parser);
+
+static int Clox_Compiler_Emit_Jump(Clox_Parser* parser, uint8_t instruction) {
+    Clox_Compiler_Emit_Bytes(parser, 3, instruction, 0xff, 0xff);
+    return Clox_Compiler_Current_Chunk()->used - 2;
+}
+
+static void Clox_Compiler_Patch_Jump(Clox_Parser* parser, int offset) {
+    // NOTE(Al-Andrew): -2 to adjust for the bytecode for the jump offset itself.
+    int jump = Clox_Compiler_Current_Chunk()->used - offset - 2;
+
+    if (jump > UINT16_MAX) {
+        Clox_Compiler_Error(parser, "Too much code to jump over.");
+    }
+
+    Clox_Compiler_Current_Chunk()->code[offset] = (jump >> 8) & 0xff;
+    Clox_Compiler_Current_Chunk()->code[offset + 1] = jump & 0xff;
+}
+
+
+static void Clox_Compiler_Compile_If_Statement(Clox_Parser* parser) {
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+    Clox_Compiler_Compile_Expression(parser);
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_RIGHT_PAREN, "Expect ')' after condition."); 
+
+    int thenJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP_IF_FALSE);
+    Clox_Compiler_Emit_Byte(parser, OP_POP);
+    Clox_Compiler_Compile_Statement(parser);
+    int elseJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP);
+
+    Clox_Compiler_Patch_Jump(parser, thenJump);
+    Clox_Compiler_Emit_Byte(parser, OP_POP);
+
+    if (Clox_Compiler_Match(parser, CLOX_TOKEN_ELSE)) {
+        Clox_Compiler_Compile_Statement(parser);
+    } 
+    Clox_Compiler_Patch_Jump(parser, elseJump);
+}
 
 static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_PRINT)) {
@@ -358,6 +398,8 @@ static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
         Clox_Compiler_Begin_Scope(parser);
         Clox_Compiler_Compile_Block(parser);
         Clox_Compiler_End_Scope(parser);
+    } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_IF)) {
+        Clox_Compiler_Compile_If_Statement(parser);
     } else {
         Clox_Compiler_Compile_Expression_Statement(parser);
     }
@@ -521,6 +563,27 @@ static inline void Clox_Compiler_Compile_Named_Variable(Clox_Parser* parser, boo
 
 static inline void Clox_Compiler_Compile_Variable(Clox_Parser* parser, bool can_assign) {
     Clox_Compiler_Compile_Named_Variable(parser, can_assign);
+}
+
+static void Clox_Compiler_Compile_And_(Clox_Parser* parser, bool can_assign) {
+    (void)can_assign;
+    int endJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP_IF_FALSE);
+
+    Clox_Compiler_Emit_Byte(parser, OP_POP);
+    Clox_Compiler_Parse_Precendence(parser, CLOX_PRECEDENCE_AND);
+
+    Clox_Compiler_Patch_Jump(parser, endJump);
+}
+
+static void Clox_Compiler_Compile_Or_(Clox_Parser* parser, bool can_assign) {
+    int elseJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP_IF_FALSE);
+    int endJump = Clox_Compiler_Emit_Jump(parser, OP_JUMP);
+
+    Clox_Compiler_Patch_Jump(parser, elseJump);
+    Clox_Compiler_Emit_Byte(parser, OP_POP);
+
+    Clox_Compiler_Parse_Precendence(parser, CLOX_PRECEDENCE_OR);
+    Clox_Compiler_Patch_Jump(parser, endJump);
 }
 
 static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser) {

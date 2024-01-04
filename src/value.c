@@ -55,3 +55,17 @@ void Clox_Value_Print(Clox_Value value) {
             CLOX_UNREACHABLE();
     }
 }
+
+bool Clox_Value_Is_Falsy(Clox_Value value) {
+    switch (value.type) {
+
+        case CLOX_VALUE_TYPE_NIL: return true;
+        case CLOX_VALUE_TYPE_BOOL: return !value.boolean;
+        case CLOX_VALUE_TYPE_NUMBER: /* fallthrough */ 
+        case CLOX_VALUE_TYPE_OBJECT: {
+            return false;
+        }
+    }
+    CLOX_UNREACHABLE();
+    return false;
+}

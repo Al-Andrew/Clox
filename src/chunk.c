@@ -171,6 +171,22 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             printf("'\n");
             return offset + 2;
         } break;
+        case OP_JUMP_IF_FALSE: {
+            uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
+            jump |= chunk->code[offset + 2];
+            int sign = 1;
+            uint32_t target = offset + 3 + sign * jump;
+            printf("%-16s %4d -> %04X\n", "OP_JUMP_IF_FALSE", offset, target);
+            return offset + 3;
+        } break;
+        case OP_JUMP: {
+            uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
+            jump |= chunk->code[offset + 2];
+            int sign = 1;
+            uint32_t target = offset + 3 + sign * jump;
+            printf("%-16s %4d -> %04X\n", "OP_JUMP", offset, target);
+            return offset + 3;
+        } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);
             return offset + 1;

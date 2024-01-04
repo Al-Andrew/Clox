@@ -303,6 +303,19 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 vm->stack[variable_index] = value;
                 vm->instruction_pointer += 2;
             } break;
+            case OP_JUMP: {
+                uint16_t offset = (uint16_t)((vm->instruction_pointer[1] << 8) | vm->instruction_pointer[2]);
+                vm->instruction_pointer += 3;
+                vm->instruction_pointer += offset;
+            } break;
+            case OP_JUMP_IF_FALSE: {
+                uint16_t offset = (uint16_t)((vm->instruction_pointer[1] << 8) | vm->instruction_pointer[2]);
+                Clox_Value condition = Clox_VM_Stack_Peek(vm, 0);
+                vm->instruction_pointer += 3;
+                if (Clox_Value_Is_Falsy(condition)) {
+                    vm->instruction_pointer += offset;
+                }
+            } break;
             default: {
 
                 return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR, .message = "Unknown instruction."};
