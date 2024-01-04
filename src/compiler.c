@@ -661,6 +661,9 @@ static void Clox_Compiler_Emit_Fuction(Clox_Parser* parser, Clox_Function_Type t
     Clox_Compiler_Compile_Block(parser);
 
     Clox_Function* function = Clox_Compiler_End(parser);
+    #ifdef CLOX_DEBUG_PRINT_COMPILED_CHUNKS
+        Clox_Chunk_Print(&function->chunk, function->name != NULL ? function->name->characters : "<script>");
+    #endif // CLOX_DEBUG_PRINT_COMPILED_CHUNKS
     Clox_Compiler_Emit_Bytes(parser, 2, OP_CONSTANT, Clox_Compiler_Make_Constant(parser, CLOX_VALUE_OBJECT(function)));
 }
 
