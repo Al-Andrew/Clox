@@ -62,12 +62,12 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
 
 
         switch (opcode) {
-            case OP_RETURN: {
-                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
+            // case OP_RETURN: {
+            //     CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
                 
-                vm->instruction_pointer += 1;
-                return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_OK};
-            }break;
+            //     vm->instruction_pointer += 1;
+            //     return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_OK};
+            // }break;
             case OP_CONSTANT: {
                 uint8_t constant_idx = vm->instruction_pointer[1];
                 Clox_Value constant_value = vm->chunk->constants.values[(size_t)constant_idx]; 
@@ -239,6 +239,13 @@ Clox_Interpret_Result Clox_VM_Interpret_Chunk(Clox_VM* const vm, Clox_Chunk* con
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_BOOL(lhs < rhs));
                 vm->instruction_pointer += 1;
             }break;
+            case OP_PRINT: {
+                CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
+                Clox_Value value = Clox_VM_Stack_Pop(vm);
+                Clox_Value_Print(value);
+                printf("\n");
+                vm->instruction_pointer += 1;
+            } break;
             default: {
 
                 return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR};

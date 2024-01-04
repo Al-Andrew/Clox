@@ -139,6 +139,14 @@ static inline void Clox_Compiler_Consume(Clox_Parser* parser, Clox_Token_Type tk
     Clox_Compiler_Error_At_Token(parser, &parser->current, message);
 }
 
+static inline bool Clox_Compiler_Match(Clox_Parser* parser, Clox_Token_Type type) {
+    if (parser->current.type != type) {
+        return false;
+    }
+    Clox_Compiler_Advance(parser);
+    return true;
+}
+
 static Clox_Chunk* compiling_chunk;
 static Clox_Chunk* Clox_Compiler_Current_Chunk() {
   return compiling_chunk;
@@ -267,6 +275,22 @@ static void Clox_Compiler_Compile_Binary(Clox_Parser* parser) {
   }
 }
 
+static void Clox_Compiler_Compile_Print_Statement(Clox_Parser* parser) {
+    Clox_Compiler_Compile_Expression(parser);
+    Clox_Compiler_Consume(parser, CLOX_TOKEN_SEMICOLON, "Expect ';' after value.");
+    Clox_Compiler_Emit_Byte(parser, OP_PRINT);
+}
+
+static void Clox_Compiler_Compile_Statement(Clox_Parser* parser) {
+    if (Clox_Compiler_Match(parser, CLOX_TOKEN_PRINT)) {
+        Clox_Compiler_Compile_Print_Statement(parser);
+    }
+}
+
+static void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
+    Clox_Compiler_Compile_Statement(parser);
+}
+
 static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser) {
     Clox_Compiler_Emit_Byte(parser, OP_RETURN);
 }
@@ -285,8 +309,10 @@ bool Clox_Compile_Source_To_Chunk(Clox_VM* vm, const char* source, Clox_Chunk* c
     compiling_chunk = chunk;
     
     Clox_Compiler_Advance(&parser);
-    Clox_Compiler_Compile_Expression(&parser);
-    Clox_Compiler_Consume(&parser, CLOX_TOKEN_EOF, "Expected end of expression.");
+    
+    while (!Clox_Compiler_Match(&parser, CLOX_TOKEN_EOF)) {
+        Clox_Compiler_Compile_Declaration(&parser);
+    }
 
     Clox_Compiler_End(&parser);
 
