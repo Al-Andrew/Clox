@@ -7,4 +7,6 @@ build/
 
 # ide stuff
 .vscode/
-
+vsxmake2022/
+.idea/
+cmake-*
