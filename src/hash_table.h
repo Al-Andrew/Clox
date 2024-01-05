@@ -3,6 +3,7 @@
 
 #include "value.h"
 #include <stdint.h>
+#include "object.h"
 
 typedef struct Clox_Hash_Table_Entry Clox_Hash_Table_Entry;
 struct Clox_Hash_Table_Entry {

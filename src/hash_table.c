@@ -32,9 +32,11 @@ static Clox_Hash_Table_Entry* Clox_Hash_Table_Find_Entry(Clox_Hash_Table* table,
                 return tombstone != NULL ? tombstone : entry;
             } else {
                 // We found a tombstone.
-                if (tombstone == NULL) tombstone = entry;
+                if (tombstone == NULL) {
+                    tombstone = entry;
+                }
             }
-            } else if (entry->key == key) {
+        } else if (entry->key == key) {
             // We found the key.
             return entry;
         }
@@ -43,8 +45,35 @@ static Clox_Hash_Table_Entry* Clox_Hash_Table_Find_Entry(Clox_Hash_Table* table,
     }
 }
 
+static Clox_Hash_Table_Entry* Clox_Hash_Table_Find_Entry_In_List(Clox_Hash_Table_Entry* entries, uint32_t count, Clox_String* key) {
+    uint32_t index = key->hash % count;
+
+    // NOTE(Al-Andrew): possible infinite loop if our invariant is broken
+    for (;;) {
+        Clox_Hash_Table_Entry* entry = &entries[index];
+        Clox_Hash_Table_Entry* tombstone = NULL;
+
+        if (entry->key == NULL) {
+            if (CLOX_VALUE_IS_NIL(entry->value)) {
+                // Empty entry.
+                return tombstone != NULL ? tombstone : entry;
+            } else {
+                // We found a tombstone.
+                if (tombstone == NULL) {
+                    tombstone = entry;
+                }
+            }
+        } else if (entry->key == key) {
+            // We found the key.
+            return entry;
+        }
+
+        index = (index + 1) % count;
+    }
+}
+
 static void Clox_Hash_Table_Adjust_Capacity(Clox_Hash_Table* table, int new_capacity) {
-    Clox_Hash_Table_Entry* entries = (Clox_Hash_Table_Entry*)malloc(sizeof(Clox_Hash_Table_Entry) * new_capacity);//ALLOCATE(Entry, capacity);
+    Clox_Hash_Table_Entry* entries = (Clox_Hash_Table_Entry*)malloc(sizeof(Clox_Hash_Table_Entry) * new_capacity);
     for (int i = 0; i < new_capacity; i++) {
         entries[i].key = NULL;
         entries[i].value = CLOX_VALUE_NIL;
@@ -55,7 +84,7 @@ static void Clox_Hash_Table_Adjust_Capacity(Clox_Hash_Table* table, int new_capa
         Clox_Hash_Table_Entry* entry = &table->entries[i];
         if (entry->key == NULL) continue;
 
-        Clox_Hash_Table_Entry* dest = Clox_Hash_Table_Find_Entry(table, entry->key);
+        Clox_Hash_Table_Entry* dest = Clox_Hash_Table_Find_Entry_In_List(entries, new_capacity, entry->key);
         dest->key = entry->key;
         dest->value = entry->value;
         table->used++;
@@ -133,9 +162,13 @@ Clox_Hash_Table_Entry* Clox_Hash_Table_Get_Raw(Clox_Hash_Table* table, char cons
             if (CLOX_VALUE_IS_NIL(entry->value)) {
                 return NULL;
             }
-        } else if (entry->key->length == len && entry->key->hash == hash && memcmp(entry->key->characters, string, len) == 0) {
-            // We found it.
-            return entry;
+        } else if (entry->key->length == len && entry->key->hash == hash) {
+            // We have a promising candidate
+            int cmp_result = memcmp(entry->key->characters, string, len);
+            if (cmp_result == 0) {
+                // We found it.
+                return entry;
+            }
         }
 
         index = (index + 1) % table->allocated;
