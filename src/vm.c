@@ -15,17 +15,13 @@ void Clox_VM_Reset_Stack(Clox_VM* vm) {
 }
 
 
-Clox_Value clock_native(int argc, Clox_Value* argv) {
-    return CLOX_VALUE_NUMBER((double)clock() / CLOCKS_PER_SEC);
-}
+Clox_VM* the_vm = NULL;
 
-Clox_VM Clox_VM_New_Empty() {
-    Clox_VM vm = {0};
-    Clox_VM_Reset_Stack(&vm);
-
-    Clox_VM_Define_Native(&vm, "GetSystemTimeInSeconds", clock_native);
-
-    return vm;
+void Clox_VM_Init(Clox_VM* vm) {
+    Clox_VM_Reset_Stack(vm);
+    vm->bytes_allocated = 0;
+    vm->next_GC = 1024 * 1024;
+    the_vm = vm;
 }
 void Clox_VM_Delete(Clox_VM* const vm) {
     // NOTE(Al-Andrew, Leak): do we own the chunk?
@@ -38,13 +34,14 @@ void Clox_VM_Delete(Clox_VM* const vm) {
         Clox_Object_Deallocate(vm, it);
         it = next;
     }
+    free(vm->gray_stack);
 }
 
-static inline void Clox_VM_Stack_Push(Clox_VM* const vm, Clox_Value const value) {
+void Clox_VM_Stack_Push(Clox_VM* const vm, Clox_Value const value) {
     *(vm->stack_top++) = value;
 }
 
-static inline Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm) {
+Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm) {
     return *(--vm->stack_top);
 }
 
@@ -224,14 +221,20 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
             }break;
             case OP_ADD: {
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(2);
-                Clox_Value rhs = Clox_VM_Stack_Pop(vm);
-                Clox_Value lhs = Clox_VM_Stack_Pop(vm);
+                Clox_Value rhs = Clox_VM_Stack_Peek(vm, 0);
+                Clox_Value lhs = Clox_VM_Stack_Peek(vm, 1);
 
                 if(lhs.type != rhs.type) {
+                    Clox_VM_Stack_Pop(vm);
+                    Clox_VM_Stack_Pop(vm);
+
                     return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
                 }
 
                 if(CLOX_VALUE_IS_NUMBER(lhs) && CLOX_VALUE_IS_NUMBER(rhs)) {
+                    Clox_VM_Stack_Pop(vm);
+                    Clox_VM_Stack_Pop(vm);
+
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs.number + rhs.number));
                 }
                 else if((lhs.type == CLOX_VALUE_TYPE_OBJECT && lhs.object->type == CLOX_OBJECT_TYPE_STRING) && (rhs.type == CLOX_VALUE_TYPE_OBJECT && rhs.object->type == CLOX_OBJECT_TYPE_STRING)) {
@@ -239,13 +242,16 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                     Clox_String* rhs_string = (Clox_String*)rhs.object;
 
                     // FIXME(Al-Andrwe): this is stupid
-                    char* concat = reallocate(NULL, 0, lhs_string->length + rhs_string->length + 1);
+                    char* concat = malloc(lhs_string->length + rhs_string->length + 1);
                     unsigned int concat_length = lhs_string->length + rhs_string->length;
                     memcpy(concat, lhs_string->characters, lhs_string->length);
                     memcpy(concat + lhs_string->length, rhs_string->characters, rhs_string->length);
                     concat[rhs_string->length + lhs_string->length] = '\0';
                     Clox_String* concat_string = Clox_String_Create(vm, concat, concat_length);
-                    deallocate(concat);
+                    free(concat);
+                    
+                    Clox_VM_Stack_Pop(vm);
+                    Clox_VM_Stack_Pop(vm);
 
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(concat_string));
                 } else {
@@ -454,7 +460,9 @@ Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* vm, const char* source) 
             break;
         }
 
+        Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(top_level_function));
         Clox_Closure* top_level_closure = Clox_Closure_Create(vm, top_level_function);
+        Clox_VM_Stack_Pop(vm);
         Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(top_level_closure));
         Clox_VM_Call(vm, top_level_closure, 0);
 

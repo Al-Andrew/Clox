@@ -10,7 +10,7 @@ Clox_Hash_Table Clox_Hash_Table_Create() {
 void Clox_Hash_Table_Destory(Clox_Hash_Table* table) {
     // NOTE(Al-Andrew, GC): the keys get cleaned up by the GC?
     if(table->entries) {
-        deallocate(table->entries);
+        FREE(table->entries, Clox_Hash_Table_Entry, table->allocated);
         table->entries = NULL;
         table->allocated = 0;
         table->used = 0;
@@ -73,7 +73,7 @@ static Clox_Hash_Table_Entry* Clox_Hash_Table_Find_Entry_In_List(Clox_Hash_Table
 }
 
 static void Clox_Hash_Table_Adjust_Capacity(Clox_Hash_Table* table, int new_capacity) {
-    Clox_Hash_Table_Entry* entries = (Clox_Hash_Table_Entry*)reallocate(NULL, 0, sizeof(Clox_Hash_Table_Entry) * new_capacity);
+    Clox_Hash_Table_Entry* entries = ALLOCATE(Clox_Hash_Table_Entry, new_capacity);
     for (int i = 0; i < new_capacity; i++) {
         entries[i].key = NULL;
         entries[i].value = CLOX_VALUE_NIL;
@@ -89,7 +89,7 @@ static void Clox_Hash_Table_Adjust_Capacity(Clox_Hash_Table* table, int new_capa
         dest->value = entry->value;
         table->used++;
     }
-    deallocate(table->entries);
+    FREE(table->entries, Clox_Hash_Table_Entry, table->allocated);
 
     table->entries = entries;
     table->allocated = new_capacity;

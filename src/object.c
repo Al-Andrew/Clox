@@ -8,27 +8,44 @@
 
 Clox_Object* Clox_Object_Allocate(Clox_VM* vm, Clox_Object_Type type, uint32_t size) {
     CLOX_DEV_ASSERT(size >= sizeof(Clox_Object));
-    Clox_Object* retval = (Clox_Object*)reallocate(NULL, 0, size);
+    Clox_Object* retval = ALLOCATE(Clox_Object, 1);
     retval->type = type;
-
+    retval->is_marked = false;
     retval->next_object = vm->objects;
     vm->objects = retval; 
-    
+    DEBUG_GC_PRINT("%p allocate %u type %d\n", (void*)retval, size, type);
+
     return retval;
 }
 
 void Clox_Object_Deallocate(Clox_VM* vm, Clox_Object* object) {
+    if(object == NULL) { 
+        return;
+    }
+
+    DEBUG_GC_PRINT("%p free ", (void*)object);
+    #ifdef CLOX_DEBUG_LOG_GC
+        Clox_Object_Print(object);
+        DEBUG_GC_PRINT("(type: %d)\n", object->type);
+    #endif // CLOX_DEBUG_LOG_GC
+
     switch (object->type) {
-        case CLOX_OBJECT_TYPE_STRING: /* fallthrough */
-        case CLOX_OBJECT_TYPE_NATIVE: /* fallthrough */
-        case CLOX_OBJECT_TYPE_CLOSURE: /* fallthrough */
+        case CLOX_OBJECT_TYPE_STRING: {
+            FREE(object, Clox_String, 1);
+        } break;
+        case CLOX_OBJECT_TYPE_NATIVE: {
+            FREE(object, Clox_Native, 1);
+        } break;
+        case CLOX_OBJECT_TYPE_CLOSURE: {
+            FREE(object, Clox_Closure, 1);
+        } break;
         case CLOX_OBJECT_TYPE_UPVALUE: {
-            deallocate(object);
+            FREE(object, Clox_UpvalueObj, 1);
         } break;
         case CLOX_OBJECT_TYPE_FUNCTION: {
             Clox_Function* function = (Clox_Function*)object;
             Clox_Chunk_Delete(&function->chunk);
-            deallocate(object);
+            FREE(object, Clox_Function, 1);
         } break;
     }
 }
@@ -56,8 +73,10 @@ Clox_String* Clox_String_Create(Clox_VM* vm, const char* string, uint32_t len) {
     retval->length = len;
     memcpy(retval->characters, string, len);
     retval->characters[len] = '\0';
+    Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(retval));
     Clox_Hash_Table_Set(&vm->strings, retval, CLOX_VALUE_NIL);
-
+    Clox_VM_Stack_Pop(vm);
+    
     return retval;
 }
 

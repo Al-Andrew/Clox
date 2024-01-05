@@ -17,8 +17,10 @@ int Clox_Print_Help() {
     return 1;
 }
 
+
 int Clox_Repl() {
-    Clox_VM vm = Clox_VM_New_Empty();
+    Clox_VM vm = {0};
+    Clox_VM_Init(&vm);
     char line[1024];
     for (;;) {
         printf("> ");
@@ -55,7 +57,7 @@ char* Clox_Read_File(const char* path_to_file) {
     size_t fileSize = ftell(file);
     rewind(file);
 
-    char* buffer = (char*)reallocate(NULL, 0, fileSize + 1);
+    char* buffer = (char*)malloc(fileSize + 1);
 
     if(buffer == NULL) {
         return NULL;
@@ -71,10 +73,11 @@ char* Clox_Read_File(const char* path_to_file) {
 
 int Clox_Run_File(const char* path_to_file) {
     char* source = Clox_Read_File(path_to_file);
-    Clox_VM vm = Clox_VM_New_Empty();
+    Clox_VM vm = {0};
+    Clox_VM_Init(&vm);
 
     Clox_Interpret_Result result = Clox_VM_Interpret_Source(&vm, source);
-    deallocate(source);
+    free(source);
     source = NULL;
     Clox_VM_Delete(&vm);
     return result.status;

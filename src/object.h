@@ -20,6 +20,7 @@ typedef struct Clox_Object Clox_Object;
 struct Clox_Object {
     Clox_Object_Type type;
     Clox_Object* next_object;
+    bool is_marked;
 };
 
 

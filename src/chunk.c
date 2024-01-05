@@ -3,17 +3,25 @@
 #include "value.h"
 #include "object.h"
 #include "memory.h"
+#include "vm.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
 Clox_Chunk Clox_Chunk_New_Empty() {
     return (Clox_Chunk){0};
 }
 
 void Clox_Chunk_Delete(Clox_Chunk* const chunk) {
+    if(chunk == NULL) {
+        return;
+    }
+    
     if(chunk->code) {
-        deallocate(chunk->code);
+        FREE(chunk->code, uint8_t, chunk->allocated);
     }
     if(chunk->source_lines) {
-        deallocate(chunk->source_lines);
+        FREE(chunk->source_lines, uint32_t, chunk->allocated);
     }
     Clox_Value_Array_Delete(&chunk->constants);
     *chunk = (Clox_Chunk){0};
@@ -25,9 +33,23 @@ void Clox_Chunk_Push(Clox_Chunk* const chunk, uint8_t const data, uint32_t const
     CLOX_DEV_ASSERT(chunk != NULL);
 
     if(chunk->used >= chunk->allocated) {
+        size_t old_allocated = chunk->allocated;
         chunk->allocated = (chunk->allocated == 0)?(8):(chunk->allocated*2);
-        chunk->code = reallocate(chunk->code, 0, sizeof(uint8_t) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
-        chunk->source_lines = reallocate(chunk->source_lines, 0, sizeof(uint32_t) * chunk->allocated);
+        
+        uint8_t* new_code = ALLOCATE(uint8_t, chunk->allocated);
+        memcpy(new_code, chunk->code, old_allocated);
+        if(chunk->code) {
+            FREE(chunk->code, uint8_t, old_allocated);
+        }
+        chunk->code = new_code;
+
+        uint32_t* new_lines = ALLOCATE(uint32_t, chunk->allocated);
+        memcpy(new_lines, chunk->source_lines, old_allocated);
+        if(chunk->source_lines) {
+            FREE(chunk->source_lines, uint8_t, old_allocated);
+        }
+        chunk->source_lines = new_lines;
+        
         chunk->code[chunk->used] = data;
         chunk->source_lines[chunk->used] = source_line;
         chunk->used += 1;
@@ -41,8 +63,11 @@ void Clox_Chunk_Push(Clox_Chunk* const chunk, uint8_t const data, uint32_t const
 }
 
 uint32_t Clox_Chunk_Push_Constant(Clox_Chunk* const chunk, Clox_Value const value) {
+    Clox_VM* vm = the_vm; // FIXME(Al-Andrew): hack
+
+    Clox_VM_Stack_Push(vm, value);
     Clox_Value_Array_Push_Back(&chunk->constants, value);
-    
+    Clox_VM_Stack_Pop(vm);
     return chunk->constants.used - 1;
 }
 

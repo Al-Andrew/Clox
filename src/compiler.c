@@ -4,46 +4,8 @@
 #include "object.h"
 #include <stdint.h>
 #include <string.h>
+#include "time.h"
 
-#define CLOX_DEBUG_PRINT_COMPILED_CHUNKS
-
-
-typedef struct {
-    Clox_Token name;
-    int depth;
-    bool is_captured;
-} Clox_Local;
-
-typedef enum {
-    CLOX_FUNCTION_TYPE_FUNCTION,
-    CLOX_FUNCTION_TYPE_SCRIPT
-} Clox_Function_Type;
-
-typedef struct {
-    uint8_t index;
-    bool isLocal;
-} Clox_Upvalue;
-
-typedef struct Clox_Compiler Clox_Compiler;
-struct Clox_Compiler {
-    Clox_Compiler* enclosing;
-    Clox_Function* function;
-    Clox_Function_Type type;
-    Clox_Local locals[UINT8_MAX + 1];
-    Clox_Upvalue upvalues[UINT8_MAX + 1];
-    int localCount;
-    int scopeDepth;
-};
-
-typedef struct {
-    Clox_Token current;
-    Clox_Token previous;
-    Clox_Scanner* scanner;
-    Clox_VM* vm;
-    Clox_Compiler* compiler;
-    bool had_error;
-    bool panic_mode;
-} Clox_Parser;
 
 static void Clox_Compiler_Init(Clox_Parser* parser, Clox_Compiler* compiler, Clox_Function_Type type) {
     compiler->enclosing = parser->compiler;
@@ -691,7 +653,7 @@ static void Clox_Compiler_Compile_Function_Declaration(Clox_Parser* parser) {
     Clox_Compiler_Emit_Define_Variable(parser, global);
 }
 
-static void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
+void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_VAR)) {
         Clox_Compiler_Compile_Variable_Declaration(parser);
     } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_FUN)) {
@@ -838,18 +800,32 @@ static void Clox_Compiler_Compile_Call(Clox_Parser* parser, bool can_assign) {
     Clox_Compiler_Emit_Bytes(parser, 2, OP_CALL, argCount);
 }
 
+void Clox_VM_GC_Mark_Compiler_Roots(Clox_Parser* parser) {
+    Clox_Compiler* compiler = parser->compiler;
+    while (compiler != NULL) {
+        Clox_VM_GC_Mark_Object((Clox_Object*)compiler->function);
+        compiler = compiler->enclosing;
+    }
+}
 
-
+Clox_Value clock_native(int argc, Clox_Value* argv) {
+    return CLOX_VALUE_NUMBER((double)clock() / CLOCKS_PER_SEC);
+}
+Clox_Parser* the_parser;
 Clox_Function* Clox_Compile_Source_To_Function(Clox_VM* vm, const char* source) {
     Clox_Parser parser = {0};
     Clox_Scanner scanner = Clox_Scanner_New(source);
     Clox_Compiler compiler = {0};
     parser.vm = vm;
     parser.scanner = &scanner;
+    the_parser = &parser;
     Clox_Compiler_Init(&parser, &compiler, CLOX_FUNCTION_TYPE_SCRIPT);
     parser.compiler = &compiler;
     // compiling_chunk = chunk;
-    
+
+    Clox_VM_Define_Native(vm, "GetSystemTimeInSeconds", clock_native);
+
+
     Clox_Compiler_Advance(&parser);
     
     while (!Clox_Compiler_Match(&parser, CLOX_TOKEN_EOF)) {

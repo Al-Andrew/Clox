@@ -30,6 +30,11 @@ struct Clox_VM{
   Clox_Hash_Table strings;
   Clox_Hash_Table globals;
   Clox_UpvalueObj* open_upvalues;
+  int gray_count;
+  int gray_capacity;
+  Clox_Object** gray_stack;
+  size_t bytes_allocated;
+  size_t next_GC;
 };
 
 
@@ -45,7 +50,11 @@ typedef struct {
     Clox_Value  return_value;
 } Clox_Interpret_Result;
 
-Clox_VM Clox_VM_New_Empty();
+void Clox_VM_Init(Clox_VM* vm);
+
+void Clox_VM_Stack_Push(Clox_VM* const vm, Clox_Value const value);
+Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm);
+
 
 void Clox_VM_Delete(Clox_VM* const vm);
 
