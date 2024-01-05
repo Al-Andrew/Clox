@@ -4,7 +4,6 @@
 #include "object.h"
 #include <stdint.h>
 #include <string.h>
-#include <winerror.h>
 
 #define CLOX_DEBUG_PRINT_COMPILED_CHUNKS
 
@@ -12,12 +11,18 @@
 typedef struct {
     Clox_Token name;
     int depth;
+    bool is_captured;
 } Clox_Local;
 
 typedef enum {
-  CLOX_FUNCTION_TYPE_FUNCTION,
-  CLOX_FUNCTION_TYPE_SCRIPT
+    CLOX_FUNCTION_TYPE_FUNCTION,
+    CLOX_FUNCTION_TYPE_SCRIPT
 } Clox_Function_Type;
+
+typedef struct {
+    uint8_t index;
+    bool isLocal;
+} Clox_Upvalue;
 
 typedef struct Clox_Compiler Clox_Compiler;
 struct Clox_Compiler {
@@ -25,6 +30,7 @@ struct Clox_Compiler {
     Clox_Function* function;
     Clox_Function_Type type;
     Clox_Local locals[UINT8_MAX + 1];
+    Clox_Upvalue upvalues[UINT8_MAX + 1];
     int localCount;
     int scopeDepth;
 };
@@ -56,6 +62,7 @@ static void Clox_Compiler_Init(Clox_Parser* parser, Clox_Compiler* compiler, Clo
     local->depth = 0;
     local->name.start = "";
     local->name.length = 0;
+    local->is_captured = false;
 }
 static inline void Clox_Compiler_Emit_Return(Clox_Parser* parser);
 static inline Clox_Function* Clox_Compiler_End(Clox_Parser* parser) {
@@ -382,11 +389,16 @@ static void Clox_Compiler_End_Scope(Clox_Parser* parser) {
     bool have_what_to_pop = parser->compiler->localCount > 0;
     bool should_pop = parser->compiler->locals[parser->compiler->localCount - 1].depth > parser->compiler->scopeDepth;
     while (have_what_to_pop && should_pop) {
-        Clox_Compiler_Emit_Byte(parser, OP_POP);
+        if (parser->compiler->locals[parser->compiler->localCount - 1].is_captured) {
+            Clox_Compiler_Emit_Byte(parser, OP_CLOSE_UPVALUE);
+        } else {
+            Clox_Compiler_Emit_Byte(parser, OP_POP);
+        }
         parser->compiler->localCount--;
         have_what_to_pop = parser->compiler->localCount > 0;
         should_pop = parser->compiler->locals[parser->compiler->localCount - 1].depth > parser->compiler->scopeDepth;    
     }
+    
 }
 
 static void Clox_Compiler_Compile_Statement(Clox_Parser* parser);
@@ -581,6 +593,7 @@ static void Clox_Compiler_Add_Local(Clox_Parser* parser, Clox_Token token) {
     Clox_Local* local = &parser->compiler->locals[parser->compiler->localCount++];
     local->name = token;
     local->depth = -1;
+    local->is_captured = false;
 }
 
 static bool Clox_Identifiers_Compare(Clox_Token* a, Clox_Token* b) {
@@ -641,8 +654,8 @@ static void Clox_Compiler_Compile_Variable_Declaration(Clox_Parser* parser) {
 }
 
 static void Clox_Compiler_Emit_Fuction(Clox_Parser* parser, Clox_Function_Type type) {
-    Clox_Compiler compiler;
-    Clox_Compiler_Init(parser,&compiler, type);
+    Clox_Compiler compiler = { 0 };
+    Clox_Compiler_Init(parser ,&compiler, type);
     Clox_Compiler_Begin_Scope(parser); 
 
     Clox_Compiler_Consume(parser, CLOX_TOKEN_LEFT_PAREN, "Expect '(' after function name.");
@@ -665,6 +678,10 @@ static void Clox_Compiler_Emit_Fuction(Clox_Parser* parser, Clox_Function_Type t
         Clox_Chunk_Print(&function->chunk, function->name != NULL ? function->name->characters : "<script>");
     #endif // CLOX_DEBUG_PRINT_COMPILED_CHUNKS
     Clox_Compiler_Emit_Bytes(parser, 2, OP_CLOSURE, Clox_Compiler_Make_Constant(parser, CLOX_VALUE_OBJECT(function)));
+
+    for (int i = 0; i < function->upvalue_count; i++) {
+        Clox_Compiler_Emit_Bytes(parser, 2, (compiler.upvalues[i].isLocal ? 1 : 0), (compiler.upvalues[i].index));
+    }
 }
 
 static void Clox_Compiler_Compile_Function_Declaration(Clox_Parser* parser) {
@@ -688,15 +705,53 @@ static void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
     }
 }
 
-static int Clox_Compiler_Resolve_Local(Clox_Parser* parser, Clox_Token* name) {
-    for (int i = parser->compiler->localCount - 1; i >= 0; i--) {
-        Clox_Local* local = &parser->compiler->locals[i];
+static int Clox_Compiler_Resolve_Local(Clox_Parser* parser, Clox_Compiler* compiler, Clox_Token* name) {
+    for (int i = compiler->localCount - 1; i >= 0; i--) {
+        Clox_Local* local = &compiler->locals[i];
         if (Clox_Identifiers_Compare(name, &local->name) == 0) {
             if (local->depth == -1) {
                 Clox_Compiler_Error(parser, "Can't read local variable in its own initializer.");
+                return -1;
             }
             return i;
         }
+    }
+
+    return -1;
+}
+
+static int Clox_Compiler_Add_Upvalue(Clox_Parser* parser, Clox_Compiler* compiler, uint8_t index, bool isLocal) {
+    int upvalueCount = compiler->function->upvalue_count;
+
+    for (int i = 0; i < upvalueCount; i++) {
+        Clox_Upvalue* upvalue = &compiler->upvalues[i];
+        if (upvalue->index == index && upvalue->isLocal == isLocal) {
+            return i;
+        }
+    }
+
+    if (upvalueCount == UINT8_MAX) {
+        Clox_Compiler_Error(parser, "Too many closure variables in function.");
+        return -1;
+    }
+
+    compiler->upvalues[upvalueCount].isLocal = isLocal;
+    compiler->upvalues[upvalueCount].index = index;
+    return compiler->function->upvalue_count++;
+}
+
+static int Clox_Compiler_Resolve_Upvalue(Clox_Parser* parser, Clox_Compiler* compiler, Clox_Token* token) {
+    if (compiler->enclosing == NULL) return -1;
+
+    int local = Clox_Compiler_Resolve_Local(parser, compiler->enclosing, token);
+    if (local != -1) {
+        compiler->enclosing->locals[local].is_captured = true;
+        return Clox_Compiler_Add_Upvalue(parser, compiler, (uint8_t)local, true);
+    }
+
+    int upvalue = Clox_Compiler_Resolve_Upvalue(parser, compiler->enclosing, token);
+    if (upvalue != -1) {
+        return Clox_Compiler_Add_Upvalue(parser, compiler, (uint8_t)upvalue, false);
     }
 
     return -1;
@@ -706,10 +761,14 @@ static int Clox_Compiler_Resolve_Local(Clox_Parser* parser, Clox_Token* name) {
 static inline void Clox_Compiler_Compile_Named_Variable(Clox_Parser* parser, bool can_assign) {
     uint8_t getOp, setOp;
     Clox_Token* name = &parser->previous; 
-    int arg = Clox_Compiler_Resolve_Local(parser, name);
+    int arg = Clox_Compiler_Resolve_Local(parser, parser->compiler, name);
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
+    } else if ((arg = Clox_Compiler_Resolve_Upvalue(parser, parser->compiler, name)) != -1) {
+        getOp = OP_GET_UPVALUE;
+        setOp = OP_SET_UPVALUE;
+
     } else {
         arg = Clox_Compiler_Emit_Identifier_Constant(parser);
         getOp = OP_GET_GLOBAL;
@@ -787,8 +846,8 @@ Clox_Function* Clox_Compile_Source_To_Function(Clox_VM* vm, const char* source) 
     Clox_Compiler compiler = {0};
     parser.vm = vm;
     parser.scanner = &scanner;
-    parser.compiler = &compiler;
     Clox_Compiler_Init(&parser, &compiler, CLOX_FUNCTION_TYPE_SCRIPT);
+    parser.compiler = &compiler;
     // compiling_chunk = chunk;
     
     Clox_Compiler_Advance(&parser);
@@ -801,7 +860,7 @@ Clox_Function* Clox_Compile_Source_To_Function(Clox_VM* vm, const char* source) 
 
 #ifdef CLOX_DEBUG_PRINT_COMPILED_CHUNKS
     if (!parser.had_error) {
-        Clox_Chunk_Print(Clox_Compiler_Current_Chunk(&parser), fn->name != NULL ? fn->name->characters : "<script>");
+        Clox_Chunk_Print(&fn->chunk, fn->name != NULL ? fn->name->characters : "<script>");
     }
 #endif
     return parser.had_error?NULL: fn;

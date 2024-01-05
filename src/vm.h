@@ -7,6 +7,7 @@
 
 #include "chunk.h"
 #include "value.h"
+#include "object.h"
 #include "hash_table.h"
 
 #define CLOX_MAX_CALL_FRAMES 64
@@ -28,6 +29,7 @@ struct Clox_VM{
   Clox_Object* objects;
   Clox_Hash_Table strings;
   Clox_Hash_Table globals;
+  Clox_UpvalueObj* open_upvalues;
 };
 
 

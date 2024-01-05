@@ -9,6 +9,7 @@
 void Clox_VM_Reset_Stack(Clox_VM* vm) {
     vm->stack_top = vm->stack;
     vm->call_frame_count = 0;
+    vm->open_upvalues = NULL;
 }
 
 
@@ -47,6 +48,16 @@ static inline Clox_Value Clox_VM_Stack_Pop(Clox_VM* const vm) {
 
 static inline Clox_Value Clox_VM_Stack_Peek(Clox_VM* const vm, uint32_t depth) {
     return *(vm->stack_top - 1 - depth);
+}
+
+static void Clox_VM_Close_Upvalues(Clox_VM* vm, Clox_Value* last) {
+    
+    while (vm->open_upvalues != NULL && vm->open_upvalues->location >= last) {
+        Clox_UpvalueObj* upvalue = vm->open_upvalues;
+        upvalue->closed = *upvalue->location;
+        upvalue->location = &upvalue->closed;
+        vm->open_upvalues = upvalue->next;
+    }
 }
 
 
@@ -163,6 +174,7 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 CLOX_VM_ASSURE_STACK_CONTAINS_AT_LEAST(1);
                 
                 Clox_Value result = Clox_VM_Stack_Pop(vm);
+                Clox_VM_Close_Upvalues(vm, frame->slots);
                 vm->call_frame_count--;
                 if (vm->call_frame_count == 0) {
                     Clox_VM_Stack_Pop(vm); //this pops the <script> function off the stack
@@ -220,7 +232,7 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 if(CLOX_VALUE_IS_NUMBER(lhs) && CLOX_VALUE_IS_NUMBER(rhs)) {
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_NUMBER(lhs.number + rhs.number));
                 }
-                else if(CLOX_VALUE_IS_STRING(lhs), CLOX_VALUE_IS_STRING(rhs)) {
+                else if((lhs.type == CLOX_VALUE_TYPE_OBJECT && lhs.object->type == CLOX_OBJECT_TYPE_STRING) && (rhs.type == CLOX_VALUE_TYPE_OBJECT && rhs.object->type == CLOX_OBJECT_TYPE_STRING)) {
                     Clox_String* lhs_string = (Clox_String*)lhs.object;
                     Clox_String* rhs_string = (Clox_String*)rhs.object;
 
@@ -369,6 +381,14 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 Clox_Value value = Clox_VM_Stack_Peek(vm, 0);
                 frame->slots[variable_index] = value;
             } break;
+            case OP_GET_UPVALUE: {
+                uint8_t slot = READ_BYTE();
+                Clox_VM_Stack_Push(vm, *frame->closure->upvalues[slot]->location);
+            } break;
+            case OP_SET_UPVALUE: {
+                uint8_t slot = READ_BYTE();
+                *frame->closure->upvalues[slot]->location = Clox_VM_Stack_Peek(vm, 0);
+            } break;
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();
                 frame->instruction_pointer += offset;
@@ -395,6 +415,21 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 Clox_Function* function = (Clox_Function*)(READ_CONSTANT().object);
                 Clox_Closure* closure = Clox_Closure_Create(vm, function);
                 Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(closure));
+
+                for (int i = 0; i < closure->upvalue_count; i++) {
+                    uint8_t isLocal = READ_BYTE();
+                    uint8_t index = READ_BYTE();
+                    if (isLocal) {
+                        closure->upvalues[i] = Clox_Closure_Capture_Upvalue(vm, frame->slots + index);
+                    } else {
+                        closure->upvalues[i] = frame->closure->upvalues[index];
+                    }
+                }
+
+            } break;
+            case OP_CLOSE_UPVALUE: {
+                Clox_VM_Close_Upvalues(vm, vm->stack_top - 1);
+                Clox_VM_Stack_Pop(vm);
             } break;
             default: {
 

@@ -1,6 +1,7 @@
 #include "chunk.h"
 #include "common.h"
 #include "value.h"
+#include "object.h"
 
 Clox_Chunk Clox_Chunk_New_Empty() {
     return (Clox_Chunk){0};
@@ -206,7 +207,31 @@ uint32_t Clox_Chunk_Print_Op_Code(Clox_Chunk* const chunk, uint32_t const offset
             printf("%-16s %4d ", "OP_CLOSURE", constant);
             Clox_Value_Print(chunk->constants.values[constant]);
             printf("\n");
+
+            Clox_Function* function = (Clox_Function*)(chunk->constants.values[constant].object);
+            for (int j = 0; j < function->upvalue_count; j++) {
+                int isLocal = chunk->code[offset + j*2];
+                int index = chunk->code[offset + j*2 + 1];
+                printf("%04d    |                     %s %d\n", offset + j , isLocal ? "local" : "upvalue", index);
+            }
+
+            return offset + 2 + function->upvalue_count*2;
+        } break;
+        case OP_GET_UPVALUE: {
+            uint8_t var_name_idx = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_GET_UPVALUE", var_name_idx);
+            printf("'\n");
             return offset + 2;
+        } break;
+        case OP_SET_UPVALUE: {
+            uint8_t var_name_idx = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_SET_UPVALUE", var_name_idx);
+            printf("'\n");
+            return offset + 2;
+        } break;
+        case OP_CLOSE_UPVALUE: {
+            printf("OP_CLOSE_UPVALUE\n");
+            return offset + 1;
         } break;
         default: {
             printf("Unknown opcode %d\n", (uint32_t)opcode);

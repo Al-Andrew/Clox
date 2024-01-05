@@ -3,6 +3,7 @@
 
 #include "chunk.h"
 #include "value.h"
+#include "object.h"
 
 Clox_Function* Clox_Compile_Source_To_Function(Clox_VM* vm, const char* source);
 

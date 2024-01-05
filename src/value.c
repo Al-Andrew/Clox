@@ -38,6 +38,8 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
     return;
 }
 
+void Clox_Object_Print(Clox_Object*);
+
 void Clox_Value_Print(Clox_Value value) {
     switch(value.type) {
         case CLOX_VALUE_TYPE_NIL: {
