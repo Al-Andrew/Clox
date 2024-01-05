@@ -11,6 +11,7 @@ typedef enum {
     CLOX_OBJECT_TYPE_STRING,
     CLOX_OBJECT_TYPE_FUNCTION,
     CLOX_OBJECT_TYPE_NATIVE,
+    CLOX_OBJECT_TYPE_CLOSURE,
 } Clox_Object_Type;
 
 typedef struct Clox_Object Clox_Object;
@@ -54,5 +55,13 @@ struct Clox_Function {
 
 
 Clox_Function* Clox_Function_Create_Empty(Clox_VM* vm);
+
+
+typedef struct {
+  Clox_Object obj;
+  Clox_Function* function;
+} Clox_Closure;
+
+Clox_Closure* Clox_Closure_Create(Clox_VM* vm, Clox_Function* function);
 
 #endif // CLOX_OBJECT_H_INCLUDED

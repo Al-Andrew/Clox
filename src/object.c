@@ -19,7 +19,8 @@ Clox_Object* Clox_Object_Allocate(Clox_VM* vm, Clox_Object_Type type, uint32_t s
 void Clox_Object_Deallocate(Clox_VM* vm, Clox_Object* object) {
     switch (object->type) {
         case CLOX_OBJECT_TYPE_STRING: /* fallthrough */
-        case CLOX_OBJECT_TYPE_NATIVE: {
+        case CLOX_OBJECT_TYPE_NATIVE: /* fallthrough */
+        case CLOX_OBJECT_TYPE_CLOSURE: {
             free(object);
         } break;
         case CLOX_OBJECT_TYPE_FUNCTION: {
@@ -76,6 +77,14 @@ void Clox_Object_Print(Clox_Object const* const object) {
             Clox_Native* native = (Clox_Native*)object;
             printf("<native %p>", native->function);
         } break;
+        case CLOX_OBJECT_TYPE_CLOSURE: {
+            Clox_Closure* fn = (Clox_Closure*)object;
+            if (fn->function->name == NULL) {
+                printf("<closure>");
+                return;
+            }
+            printf("<closure %.*s>", fn->function->name->length, fn->function->name->characters);
+        } break;
     }
 }
 
@@ -92,4 +101,11 @@ Clox_Native* Clox_Native_Create(Clox_VM* vm, Clox_Native_Fn lambda) {
     native->function = lambda;
 
     return native;
+}
+
+Clox_Closure* Clox_Closure_Create(Clox_VM* vm, Clox_Function* function) {
+    Clox_Closure* closure = (Clox_Closure*)Clox_Object_Allocate(vm, CLOX_OBJECT_TYPE_CLOSURE, sizeof(Clox_Closure));
+    closure->function = function;
+
+    return closure;
 }

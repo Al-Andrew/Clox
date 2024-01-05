@@ -13,7 +13,7 @@
 #define CLOX_MAX_STACK (CLOX_MAX_CALL_FRAMES * (UINT8_MAX + 1))
 
 typedef struct {
-  Clox_Function* function;
+  Clox_Closure* closure;
   uint8_t* instruction_pointer;
   Clox_Value* slots;
 } Clox_Call_Frame;

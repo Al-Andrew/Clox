@@ -65,7 +65,7 @@ static Clox_Interpret_Result Clox_VM_Runtime_Error(Clox_VM* vm, char const* cons
 
     for (int i = vm->call_frame_count - 1; i >= 0; i--) {
         Clox_Call_Frame* frame = &vm->frames[i];
-        Clox_Function* function = frame->function;
+        Clox_Function* function = frame->closure->function;
         size_t instruction = frame->instruction_pointer - function->chunk.code - 1;
         fprintf(stderr, "[line %d] in ", function->chunk.source_lines[instruction]);
         if (function->name == NULL) {
@@ -79,10 +79,10 @@ static Clox_Interpret_Result Clox_VM_Runtime_Error(Clox_VM* vm, char const* cons
     return (Clox_Interpret_Result){.status = INTERPRET_RUNTIME_ERROR};
 }
 
-static bool Clox_VM_Call(Clox_VM* vm, Clox_Function* callee, int argCount) {
+static bool Clox_VM_Call(Clox_VM* vm, Clox_Closure* callee, int argCount) {
 
-    if (argCount != callee->arity) {
-        Clox_VM_Runtime_Error(vm, "Expected %d arguments but got %d.", callee->arity, argCount);
+    if (argCount != callee->function->arity) {
+        Clox_VM_Runtime_Error(vm, "Expected %d arguments but got %d.", callee->function->arity, argCount);
         return false;
     }
     if (vm->call_frame_count == CLOX_MAX_CALL_FRAMES) {
@@ -90,8 +90,8 @@ static bool Clox_VM_Call(Clox_VM* vm, Clox_Function* callee, int argCount) {
         return false;
     }
     Clox_Call_Frame* frame = &vm->frames[vm->call_frame_count++];
-    frame->function = callee;
-    frame->instruction_pointer = callee->chunk.code;
+    frame->closure = callee;
+    frame->instruction_pointer = callee->function->chunk.code;
     frame->slots = vm->stack_top - argCount - 1;
     return true;
 }
@@ -99,8 +99,8 @@ static bool Clox_VM_Call(Clox_VM* vm, Clox_Function* callee, int argCount) {
 static bool Clox_VM_Call_Value(Clox_VM* vm, Clox_Value callee, int argCount) {
   if (CLOX_VALUE_IS_OBJECT(callee)) {
     switch (callee.object->type) {
-        case CLOX_OBJECT_TYPE_FUNCTION: {
-            return Clox_VM_Call(vm, (Clox_Function*)callee.object, argCount);
+        case CLOX_OBJECT_TYPE_CLOSURE: {
+            return Clox_VM_Call(vm, (Clox_Closure*)callee.object, argCount);
         } break;
         case CLOX_OBJECT_TYPE_NATIVE: {
             Clox_Native* native = (Clox_Native*)callee.object;
@@ -136,7 +136,7 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
         (uint16_t)((frame->instruction_pointer[-2] << 8) | frame->instruction_pointer[-1]))
 
     #define READ_CONSTANT() \
-        (frame->function->chunk.constants.values[READ_BYTE()])
+        (frame->closure->function->chunk.constants.values[READ_BYTE()])
 
     #define READ_STRING() ((Clox_String*)READ_CONSTANT().object)
 
@@ -153,7 +153,7 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
         #endif // CLOX_DEBUG_TRACE_STACK
 
         #ifdef CLOX_DEBUG_TRACE_EXECUTION
-        Clox_Chunk_Print_Op_Code(&frame->function->chunk, (uint32_t)(frame->instruction_pointer - frame->function->chunk.code));
+        Clox_Chunk_Print_Op_Code(&frame->closure->function->chunk, (uint32_t)(frame->instruction_pointer - frame->closure->function->chunk.code));
         #endif // CLOX_DEBUG_TRACE_EXECUTION
 
         Clox_Op_Code opcode = (Clox_Op_Code)READ_BYTE();
@@ -391,6 +391,11 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                 }
                 frame = &vm->frames[vm->call_frame_count - 1];
             } break;
+            case OP_CLOSURE: {
+                Clox_Function* function = (Clox_Function*)(READ_CONSTANT().object);
+                Clox_Closure* closure = Clox_Closure_Create(vm, function);
+                Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(closure));
+            } break;
             default: {
 
                 return (Clox_Interpret_Result){.return_value = Clox_VM_Stack_Pop(vm), .status = INTERPRET_COMPILE_ERROR, .message = "Unknown instruction."};
@@ -413,8 +418,9 @@ Clox_Interpret_Result Clox_VM_Interpret_Source(Clox_VM* vm, const char* source) 
             break;
         }
 
-        Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(top_level_function));
-        Clox_VM_Call(vm, top_level_function, 0);
+        Clox_Closure* top_level_closure = Clox_Closure_Create(vm, top_level_function);
+        Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(top_level_closure));
+        Clox_VM_Call(vm, top_level_closure, 0);
 
         result = Clox_VM_Interpret_Function(vm, top_level_function);
     } while(false);
