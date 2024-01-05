@@ -1,6 +1,6 @@
 #include "value_array.h"
 #include "value.h"
-
+#include "memory.h"
 
 Clox_Value_Array Clox_Value_Array_New_Empty() {
     return (Clox_Value_Array){0};
@@ -8,7 +8,7 @@ Clox_Value_Array Clox_Value_Array_New_Empty() {
 
 void Clox_Value_Array_Delete(Clox_Value_Array* const chunk) {
     if(chunk->values)
-        free(chunk->values);
+        deallocate(chunk->values);
     *chunk = (Clox_Value_Array){0};
 
     return;
@@ -19,7 +19,7 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
 
     if(chunk->values == NULL) {
         chunk->allocated = 8;
-        chunk->values = malloc(sizeof(Clox_Value) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
+        chunk->values = reallocate(NULL, 0, sizeof(Clox_Value) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
         chunk->values[0] = op;
         chunk->used = 1;
         return;
@@ -27,7 +27,7 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
 
     if(chunk->used >= chunk->allocated) {
         chunk->allocated *= 2;
-        chunk->values = realloc(chunk->values, sizeof(Clox_Value) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
+        chunk->values = reallocate(chunk->values, 0, sizeof(Clox_Value) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
         chunk->values[chunk->used] = op;
         chunk->used += 1;
         return;
@@ -38,7 +38,7 @@ void Clox_Value_Array_Push_Back(Clox_Value_Array* const chunk, Clox_Value const 
     return;
 }
 
-void Clox_Object_Print(Clox_Object*);
+void Clox_Object_Print(Clox_Object const* const);
 
 void Clox_Value_Print(Clox_Value value) {
     switch(value.type) {

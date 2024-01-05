@@ -2,6 +2,7 @@
 #include "common.h"
 #include "value.h"
 #include "object.h"
+#include "memory.h"
 
 Clox_Chunk Clox_Chunk_New_Empty() {
     return (Clox_Chunk){0};
@@ -9,10 +10,10 @@ Clox_Chunk Clox_Chunk_New_Empty() {
 
 void Clox_Chunk_Delete(Clox_Chunk* const chunk) {
     if(chunk->code) {
-        free(chunk->code);
+        deallocate(chunk->code);
     }
     if(chunk->source_lines) {
-        free(chunk->source_lines);
+        deallocate(chunk->source_lines);
     }
     Clox_Value_Array_Delete(&chunk->constants);
     *chunk = (Clox_Chunk){0};
@@ -25,8 +26,8 @@ void Clox_Chunk_Push(Clox_Chunk* const chunk, uint8_t const data, uint32_t const
 
     if(chunk->used >= chunk->allocated) {
         chunk->allocated = (chunk->allocated == 0)?(8):(chunk->allocated*2);
-        chunk->code = realloc(chunk->code, sizeof(uint8_t) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
-        chunk->source_lines = realloc(chunk->source_lines, sizeof(uint32_t) * chunk->allocated);
+        chunk->code = reallocate(chunk->code, 0, sizeof(uint8_t) * chunk->allocated); // TODO(Al-Andrew, AllocFailure): handle
+        chunk->source_lines = reallocate(chunk->source_lines, 0, sizeof(uint32_t) * chunk->allocated);
         chunk->code[chunk->used] = data;
         chunk->source_lines[chunk->used] = source_line;
         chunk->used += 1;

@@ -2,8 +2,10 @@
 #include "common.h"
 #include "compiler.h"
 #include <float.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "memory.h"
 
 
 void Clox_VM_Reset_Stack(Clox_VM* vm) {
@@ -236,15 +238,14 @@ Clox_Interpret_Result Clox_VM_Interpret_Function(Clox_VM* const vm, Clox_Functio
                     Clox_String* lhs_string = (Clox_String*)lhs.object;
                     Clox_String* rhs_string = (Clox_String*)rhs.object;
 
-                    // TODO(Al-Andrew, GC): where does the memory for the old strings go?
                     // FIXME(Al-Andrwe): this is stupid
-                    char* concat = malloc(lhs_string->length + rhs_string->length + 1);
+                    char* concat = reallocate(NULL, 0, lhs_string->length + rhs_string->length + 1);
                     unsigned int concat_length = lhs_string->length + rhs_string->length;
                     memcpy(concat, lhs_string->characters, lhs_string->length);
                     memcpy(concat + lhs_string->length, rhs_string->characters, rhs_string->length);
                     concat[rhs_string->length + lhs_string->length] = '\0';
                     Clox_String* concat_string = Clox_String_Create(vm, concat, concat_length);
-                    free(concat);
+                    deallocate(concat);
 
                     Clox_VM_Stack_Push(vm, CLOX_VALUE_OBJECT(concat_string));
                 } else {

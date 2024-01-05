@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "memory.h"
 
 int Clox_Print_Help() {
 
@@ -54,7 +55,7 @@ char* Clox_Read_File(const char* path_to_file) {
     size_t fileSize = ftell(file);
     rewind(file);
 
-    char* buffer = (char*)malloc(fileSize + 1); // TODO(Al-Andrew, AllocFailure): custom allocator
+    char* buffer = (char*)reallocate(NULL, 0, fileSize + 1);
 
     if(buffer == NULL) {
         return NULL;
@@ -73,7 +74,7 @@ int Clox_Run_File(const char* path_to_file) {
     Clox_VM vm = Clox_VM_New_Empty();
 
     Clox_Interpret_Result result = Clox_VM_Interpret_Source(&vm, source);
-    free(source);
+    deallocate(source);
     source = NULL;
     Clox_VM_Delete(&vm);
     return result.status;

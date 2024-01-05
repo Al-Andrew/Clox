@@ -4,10 +4,11 @@
 #include <string.h>
 #include "hash_table.h"
 #include "vm.h"
+#include "memory.h"
 
 Clox_Object* Clox_Object_Allocate(Clox_VM* vm, Clox_Object_Type type, uint32_t size) {
     CLOX_DEV_ASSERT(size >= sizeof(Clox_Object));
-    Clox_Object* retval = (Clox_Object*)malloc(size);
+    Clox_Object* retval = (Clox_Object*)reallocate(NULL, 0, size);
     retval->type = type;
 
     retval->next_object = vm->objects;
@@ -22,12 +23,12 @@ void Clox_Object_Deallocate(Clox_VM* vm, Clox_Object* object) {
         case CLOX_OBJECT_TYPE_NATIVE: /* fallthrough */
         case CLOX_OBJECT_TYPE_CLOSURE: /* fallthrough */
         case CLOX_OBJECT_TYPE_UPVALUE: {
-            free(object);
+            deallocate(object);
         } break;
         case CLOX_OBJECT_TYPE_FUNCTION: {
             Clox_Function* function = (Clox_Function*)object;
             Clox_Chunk_Delete(&function->chunk);
-            free(object);
+            deallocate(object);
         } break;
     }
 }
