@@ -1,0 +1,13 @@
+
+var global = "hello, from global";
+
+fun lefunc(param) {
+
+    var my_fun_var = param + " and from lefunc";
+    fun closure() {
+        return my_fun_var + " and from the closure";
+    }
+    return closure;
+}
+
+print lefunc(global)();
