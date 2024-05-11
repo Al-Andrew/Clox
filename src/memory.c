@@ -21,6 +21,8 @@ void deallocate(void* ptr) {
 
 #ifdef CLOX_DEBUG_LOG_GC
     #define DEBUG_GC_PRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#else
+    #define DEBUG_GC_PRINT(fmt, ...) /* do nothing */
 #endif // CLOX_DEBUG_LOG_GC
 
 void Clox_VM_GC(Clox_VM* vm) {

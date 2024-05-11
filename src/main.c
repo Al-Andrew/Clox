@@ -39,13 +39,8 @@ int Clox_Repl() {
 }
 
 char* Clox_Read_File(const char* path_to_file) {
-    FILE* file = NULL;
-    if(fopen_s(&file, path_to_file, "rb") != 0) {
-        printf("[Error] Could not get descriptor for file %s.\n", path_to_file);
-        return NULL;
-    }
     
-
+    FILE* file = fopen(path_to_file, "rb");
     if(file == NULL) {
         printf("[Error] Could not get descriptor for file %s.\n", path_to_file);
         return NULL;

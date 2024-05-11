@@ -2,8 +2,8 @@
 #define CLOX_VM_H_INCLUDED
 
 // NOTE(Al-Andrew): uncomment for debugging 
-#define CLOX_DEBUG_TRACE_EXECUTION
-#define CLOX_DEBUG_TRACE_STACK
+// #define CLOX_DEBUG_TRACE_EXECUTION
+// #define CLOX_DEBUG_TRACE_STACK
 
 #include "chunk.h"
 #include "value.h"

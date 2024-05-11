@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define CLOX_DEBUG_PRINT_COMPILED_CHUNKS
+// #define CLOX_DEBUG_PRINT_COMPILED_CHUNKS
 
 
 typedef struct {
@@ -691,7 +691,7 @@ static void Clox_Compiler_Compile_Function_Declaration(Clox_Parser* parser) {
     Clox_Compiler_Emit_Define_Variable(parser, global);
 }
 
-static void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
+void Clox_Compiler_Compile_Declaration(Clox_Parser* parser) {
     if (Clox_Compiler_Match(parser, CLOX_TOKEN_VAR)) {
         Clox_Compiler_Compile_Variable_Declaration(parser);
     } else if (Clox_Compiler_Match(parser, CLOX_TOKEN_FUN)) {

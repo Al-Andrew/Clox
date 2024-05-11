@@ -3,3 +3,4 @@ fun doStuff() {
 }
 
 print doStuff; // print function name
+doStuff();
